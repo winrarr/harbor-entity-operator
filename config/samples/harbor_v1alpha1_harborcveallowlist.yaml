@@ -1,0 +1,10 @@
+apiVersion: harbor.harbor-entity-operator.io/v1alpha1
+kind: HarborCVEAllowlist
+metadata:
+  name: vulnerability-exceptions
+spec:
+  harborConnectionRef:
+    name: clusterharborconnection-sample
+    kind: ClusterHarborConnection
+  items:
+    - cveID: CVE-2024-12345

@@ -1,0 +1,291 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.22.0
+  name: immutabletagrules.harbor.harbor-entity-operator.io
+spec:
+  group: harbor.harbor-entity-operator.io
+  names:
+    categories:
+    - harbor
+    kind: ImmutableTagRule
+    listKind: ImmutableTagRuleList
+    plural: immutabletagrules
+    singular: immutabletagrule
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.projectRef.name
+      name: Project
+      type: string
+    - jsonPath: .spec.disabled
+      name: Disabled
+      type: boolean
+    - jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].reason
+      name: Reason
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].message
+      name: Message
+      priority: 1
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: ImmutableTagRule is the Schema for the immutabletagrules API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: ImmutableTagRuleSpec defines the desired state of ImmutableTagRule.
+            properties:
+              action:
+                description: Action defines the rule action.
+                type: string
+              creationPolicy:
+                description: |-
+                  CreationPolicy controls whether the operator creates or adopts the Harbor rule.
+                  When omitted, the operator's default creation policy is used.
+                enum:
+                - Create
+                - Adopt
+                - CreateOrAdopt
+                type: string
+              deletionPolicy:
+                default: Delete
+                description: |-
+                  DeletionPolicy controls what happens when the Kubernetes object is deleted.
+                  Delete removes the corresponding Harbor resource before removing the finalizer.
+                  Orphan skips Harbor-side deletion and removes the finalizer so the
+                  Kubernetes object can be deleted while leaving the Harbor resource in place.
+                  Defaults to Delete.
+                enum:
+                - Delete
+                - Orphan
+                type: string
+              disabled:
+                default: false
+                description: Disabled indicates whether the rule is disabled. Defaults
+                  to false.
+                type: boolean
+              driftDetectionInterval:
+                description: |-
+                  DriftDetectionInterval is the interval at which the operator checks for drift.
+                  When omitted, the operator's default drift detection interval is used.
+                  An explicit value of 0 disables periodic drift detection.
+                type: string
+              harborConnectionRef:
+                description: |-
+                  HarborConnectionRef references the Harbor connection object to use.
+                  When the operator is started with --harbor-connection, this field may be omitted.
+                properties:
+                  kind:
+                    default: HarborConnection
+                    description: |-
+                      Kind selects the Harbor connection object kind.
+                      Defaults to HarborConnection.
+                    enum:
+                    - HarborConnection
+                    - ClusterHarborConnection
+                    type: string
+                  name:
+                    description: Name of the referenced Harbor connection object.
+                    type: string
+                required:
+                - name
+                type: object
+              params:
+                additionalProperties:
+                  x-kubernetes-preserve-unknown-fields: true
+                description: Params holds template parameters.
+                type: object
+              priority:
+                description: Priority defines the rule priority.
+                type: integer
+              projectRef:
+                description: ProjectRef references a Project CR to derive the Harbor
+                  project ID.
+                properties:
+                  name:
+                    description: Name of the Project resource.
+                    minLength: 1
+                    type: string
+                  namespace:
+                    description: Namespace of the Project resource. Defaults to the
+                      referencing resource namespace.
+                    type: string
+                required:
+                - name
+                type: object
+              reconcileNonce:
+                description: ReconcileNonce forces an immediate reconcile when updated.
+                type: string
+              scopeSelectors:
+                additionalProperties:
+                  items:
+                    description: ImmutableSelector defines an immutable tag rule selector.
+                    properties:
+                      decoration:
+                        description: Decoration defines selector decoration.
+                        type: string
+                      extras:
+                        description: Extras defines extra selector details.
+                        type: string
+                      kind:
+                        description: Kind defines selector kind.
+                        type: string
+                      pattern:
+                        description: Pattern defines selector pattern.
+                        type: string
+                    type: object
+                  type: array
+                description: ScopeSelectors define scope selectors.
+                type: object
+              tagSelectors:
+                description: TagSelectors define tag selectors.
+                items:
+                  description: ImmutableSelector defines an immutable tag rule selector.
+                  properties:
+                    decoration:
+                      description: Decoration defines selector decoration.
+                      type: string
+                    extras:
+                      description: Extras defines extra selector details.
+                      type: string
+                    kind:
+                      description: Kind defines selector kind.
+                      type: string
+                    pattern:
+                      description: Pattern defines selector pattern.
+                      type: string
+                  type: object
+                type: array
+              template:
+                description: Template defines the rule template.
+                type: string
+            type: object
+            x-kubernetes-validations:
+            - message: projectRef is required
+              rule: has(self.projectRef)
+            - message: projectRef is immutable; delete and recreate the ImmutableTagRule
+              rule: '!has(oldSelf.projectRef) || (has(self.projectRef) && self.projectRef
+                == oldSelf.projectRef)'
+          status:
+            description: ImmutableTagRuleStatus defines the observed state of ImmutableTagRule.
+            properties:
+              conditions:
+                description: Conditions represent the latest available observations
+                  of the resource's state.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              harborImmutableRuleID:
+                description: HarborImmutableRuleID is the ID of the rule in Harbor.
+                type: integer
+              observedGeneration:
+                description: ObservedGeneration is the most recent generation observed
+                  by the controller.
+                format: int64
+                type: integer
+              resolvedHarborConnection:
+                description: |-
+                  ResolvedHarborConnection is the exact connection identity used for Harbor
+                  operations. Once set, changing the effective connection is refused.
+                properties:
+                  kind:
+                    description: Kind is either HarborConnection or ClusterHarborConnection.
+                    type: string
+                  name:
+                    description: Name is the name of the connection object.
+                    type: string
+                  namespace:
+                    description: Namespace is set for a namespaced HarborConnection.
+                    type: string
+                  uid:
+                    description: UID is the Kubernetes UID of the connection object.
+                    type: string
+                required:
+                - kind
+                - name
+                - uid
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

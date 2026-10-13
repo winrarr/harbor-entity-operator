@@ -1,9 +1,0 @@
-- op: add
-  path: /spec/template/spec/containers/0/args/-
-  value: --metrics-bind-address=:8443
-- op: add
-  path: /spec/template/spec/containers/0/ports/-
-  value:
-    name: metrics
-    containerPort: 8443
-    protocol: TCP

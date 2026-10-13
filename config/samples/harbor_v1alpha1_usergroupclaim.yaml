@@ -1,0 +1,13 @@
+apiVersion: harbor.harbor-entity-operator.io/v1alpha1
+kind: UserGroupClaim
+metadata:
+  labels:
+    app.kubernetes.io/name: harbor-entity-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: usergroupclaim-sample
+spec:
+  harborConnectionRef:
+    name: harborconnection-sample
+    kind: HarborConnection
+  groupName: developers@example.com
+  groupType: 2

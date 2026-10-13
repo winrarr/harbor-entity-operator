@@ -1,0 +1,113 @@
+# Member CRD
+
+A **Member** custom resource represents membership of a **user** or **group**
+in a Harbor project with a specific role (admin, developer, guest, etc.).
+
+The operator ensures that the corresponding project member exists in Harbor.
+
+## Quick Start
+
+### Example: user member
+
+```yaml
+apiVersion: harbor.harbor-entity-operator.io/v1alpha1
+kind: Member
+metadata:
+  name: my-project-alice
+spec:
+  harborConnectionRef:
+    name: my-harbor
+    kind: HarborConnection
+  creationPolicy: Create
+
+  projectRef:
+    name: my-project
+
+  # Role within the project. The operator converts this to Harbor's role ID.
+  role: "developer"
+
+  memberUser:
+    userRef:
+      name: alice
+```
+
+### Example: group member
+
+```yaml
+apiVersion: harbor.harbor-entity-operator.io/v1alpha1
+kind: Member
+metadata:
+  name: my-project-dev-group
+spec:
+  harborConnectionRef:
+    name: my-harbor
+    kind: HarborConnection
+  projectRef:
+    name: my-project
+  role: "maintainer"
+
+  memberGroup:
+    groupClaimRef:
+      name: dev-team
+```
+
+## Key Fields
+
+- **spec.harborConnectionRef** (object, optional when the operator is configured with `--harbor-connection`)
+  Reference to the Harbor connection object to use. Set `name` and optional `kind`
+  (`HarborConnection` by default or `ClusterHarborConnection`).
+
+- **spec.projectRef** (object, required)
+  Project custom resource reference.
+
+- **spec.role** (string, required)
+  Human-readable role name. The operator maps this to a Harbor role ID, e.g.:
+
+  - `admin` → 1
+  - `developer` → 2
+  - `guest` → 3
+  - `maintainer` → 4
+
+  The operator maps these names to Harbor role IDs.
+
+- **spec.memberUser** (object, optional)
+  References the `User` custom resource to grant membership to.
+
+- **spec.memberGroup** (object, optional)
+  References the `UserGroupClaim` custom resource to grant membership to.
+
+Exactly one of `memberUser` or `memberGroup` should be set.
+
+- **spec.creationPolicy** (string, optional)
+  Controls whether the membership is created, adopted, or either. When omitted, uses the operator's default creation policy (`Create` unless configured otherwise).
+
+## Common Fields
+
+`Member` embeds `HarborSpecBase`. See [Common Spec Fields](../reference/common-spec-fields.md)
+for the shared connection, deletion, and reconciliation controls, or jump to the
+generated [`HarborSpecBase` reference](../reference/api.md#harborspecbase).
+
+## Behavior
+
+- **Create**
+
+  - Converts `role` to Harbor’s role ID.
+  - Calls Harbor’s project membership API with either `member_user` or `member_group`.
+  - Applies `creationPolicy` when a matching membership already exists or is absent.
+
+- **Update**
+
+  - Changing `role` updates the member's role in Harbor.
+  - Project and member identity references are immutable. To change either one,
+    delete the existing `Member` and create a new one.
+
+- **Delete**
+
+  - The operator records the resolved Harbor project and membership IDs in status.
+  - On CR deletion, it uses those IDs to remove the corresponding member without depending on referenced `Project`, `User`, or `UserGroupClaim` resources still existing.
+
+- **Error handling**
+
+  - If Harbor returns an error (e.g. unknown user, unknown project), the operator
+    records the failure in status and logs the details so you can diagnose
+    configuration issues.

@@ -1,7 +1,9 @@
 # Product direction
 
-Operator Foundry provides a strong starting point for building Kubernetes operators for external systems. It combines reusable implementation conventions, a reference implementation, operational workflows, documentation structure, and a project-kickoff process that helps coding agents make sound early decisions.
+Harbor Entity Operator lets platform teams manage Harbor's control-plane resources through Kubernetes custom resources. Teams declare Harbor connections, projects, identities, registry integrations, policies, and instance settings beside the workloads that depend on them. The operator reconciles those declarations through Harbor's v2 REST API and reports progress and failures in Kubernetes status.
 
-The repository should make a new operator easy to start while preserving room for ambitious full-product goals. The reference patterns are intentionally concrete so that an agent can copy techniques, compare alternatives, and adapt them to the semantics of the new external system.
+The operator targets an existing Harbor installation. It does not install Harbor or manage image contents such as pushed artifacts, repository tags, scans, or replication runs. Those are data-plane objects or one-shot operations rather than stable control-plane configuration.
 
-The immediate confidence goal is that the reference examples work together as a complete operator: the controller, typed client, lifecycle behavior, installation assets, and documentation should be exercised by unit, contract, operational, and Kind tests. The golden path should remain small enough to understand and strong enough to expose broken conventions before they are copied into a new operator.
+The public API is based on Harbor's native scope and identity model. Named resources use Kubernetes names when Harbor provides a stable name; references connect dependent resources; connection and Secret references keep credentials out of custom resource specs. Finalizers, adoption rules, deletion policies, drift detection, and status make Harbor-side lifecycle behavior explicit.
+
+The first useful product slice is the complete set of supported Harbor control-plane CRDs and reconcilers, with generated install assets, resource guides, unit and HTTP contract tests, and a Kind workflow that exercises the operator against Harbor.

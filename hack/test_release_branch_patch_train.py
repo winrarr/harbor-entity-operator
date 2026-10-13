@@ -52,14 +52,14 @@ class PatchTrainRepo:
             "api",
             "cmd",
             "internal",
-            "charts/operator-foundry/templates",
+            "charts/harbor-entity-operator/templates",
         ):
             (self.work / directory).mkdir(parents=True, exist_ok=True)
 
-        (self.work / "charts/operator-foundry/Chart.yaml").write_text(
-            'apiVersion: v2\nname: operator-foundry\nversion: 0.5.0\nappVersion: "0.7.0"\n'
+        (self.work / "charts/harbor-entity-operator/Chart.yaml").write_text(
+            'apiVersion: v2\nname: harbor-entity-operator\nversion: 0.5.0\nappVersion: "0.7.0"\n'
         )
-        (self.work / "charts/operator-foundry/templates/deployment.yaml").write_text("old chart\n")
+        (self.work / "charts/harbor-entity-operator/templates/deployment.yaml").write_text("old chart\n")
         (self.work / "go.mod").write_text("module example.com/test\n")
         (self.work / "go.sum").write_text("")
         (self.work / "Dockerfile").write_text("FROM scratch\n")
@@ -117,10 +117,10 @@ class ReleaseBranchPatchTrainTests(unittest.TestCase):
         self.assertNotIn("Next chart tag:", output)
 
     def test_prior_chart_only_release_does_not_block_dependency_update(self) -> None:
-        (self.repo.work / "charts/operator-foundry/Chart.yaml").write_text(
-            'apiVersion: v2\nname: operator-foundry\nversion: 0.5.1\nappVersion: "0.7.0"\n'
+        (self.repo.work / "charts/harbor-entity-operator/Chart.yaml").write_text(
+            'apiVersion: v2\nname: harbor-entity-operator\nversion: 0.5.1\nappVersion: "0.7.0"\n'
         )
-        (self.repo.work / "charts/operator-foundry/templates/deployment.yaml").write_text(
+        (self.repo.work / "charts/harbor-entity-operator/templates/deployment.yaml").write_text(
             "chart-only change\n"
         )
         self.repo.commit("chore(chart): release chart patch")
@@ -138,8 +138,8 @@ class ReleaseBranchPatchTrainTests(unittest.TestCase):
         self.assertIn("Next chart version: 0.5.2", output)
 
     def test_prior_paired_release_advances_chart_version(self) -> None:
-        (self.repo.work / "charts/operator-foundry/Chart.yaml").write_text(
-            'apiVersion: v2\nname: operator-foundry\nversion: 0.5.1\nappVersion: "0.7.1"\n'
+        (self.repo.work / "charts/harbor-entity-operator/Chart.yaml").write_text(
+            'apiVersion: v2\nname: harbor-entity-operator\nversion: 0.5.1\nappVersion: "0.7.1"\n'
         )
         self.repo.commit("feat: prepare paired release")
         self.repo.tag("v0.7.1", "Release v0.7.1")
@@ -156,7 +156,7 @@ class ReleaseBranchPatchTrainTests(unittest.TestCase):
         self.assertIn("Next chart version: 0.5.2", output)
 
     def test_unpublished_chart_change_blocks_dependency_update(self) -> None:
-        (self.repo.work / "charts/operator-foundry/templates/deployment.yaml").write_text(
+        (self.repo.work / "charts/harbor-entity-operator/templates/deployment.yaml").write_text(
             "unpublished chart change\n"
         )
         with (self.repo.work / "go.sum").open("a") as go_sum:
@@ -169,8 +169,8 @@ class ReleaseBranchPatchTrainTests(unittest.TestCase):
         self.assertIn("chart changes require explicit chart release intent", output)
 
     def test_existing_automated_tag_schedules_missing_paired_publish(self) -> None:
-        (self.repo.work / "charts/operator-foundry/Chart.yaml").write_text(
-            'apiVersion: v2\nname: operator-foundry\nversion: 0.5.1\nappVersion: "0.7.1"\n'
+        (self.repo.work / "charts/harbor-entity-operator/Chart.yaml").write_text(
+            'apiVersion: v2\nname: harbor-entity-operator\nversion: 0.5.1\nappVersion: "0.7.1"\n'
         )
         with (self.repo.work / "go.sum").open("a") as go_sum:
             go_sum.write("# dep update\n")
@@ -180,7 +180,7 @@ class ReleaseBranchPatchTrainTests(unittest.TestCase):
 
         output = self.repo.patch_train_output()
 
-        self.assertIn("Would dispatch publish-release.yml for v0.7.1", output)
+        self.assertIn("Would dispatch publish-release.yaml for v0.7.1", output)
 
     def test_stale_chart_metadata_blocks_paired_release_recovery(self) -> None:
         with (self.repo.work / "go.sum").open("a") as go_sum:

@@ -1,0 +1,204 @@
+package v1alpha1
+
+import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+// RobotAction is the action of a robot permission access rule.
+type RobotAction string
+
+const (
+	RobotActionAll         RobotAction = "*"
+	RobotActionPull        RobotAction = "pull"
+	RobotActionPush        RobotAction = "push"
+	RobotActionCreate      RobotAction = "create"
+	RobotActionRead        RobotAction = "read"
+	RobotActionUpdate      RobotAction = "update"
+	RobotActionDelete      RobotAction = "delete"
+	RobotActionList        RobotAction = "list"
+	RobotActionOperate     RobotAction = "operate"
+	RobotActionScannerPull RobotAction = "scanner-pull"
+	RobotActionStop        RobotAction = "stop"
+)
+
+// RobotResource is the resource of a robot permission access rule.
+type RobotResource string
+
+const (
+	RobotResourceAll                RobotResource = "*"
+	RobotResourceConfiguration      RobotResource = "configuration"
+	RobotResourceLabel              RobotResource = "label"
+	RobotResourceLog                RobotResource = "log"
+	RobotResourceLDAPUser           RobotResource = "ldap-user"
+	RobotResourceMember             RobotResource = "member"
+	RobotResourceMetadata           RobotResource = "metadata"
+	RobotResourceQuota              RobotResource = "quota"
+	RobotResourceRepository         RobotResource = "repository"
+	RobotResourceTagRetention       RobotResource = "tag-retention"
+	RobotResourceImmutableTag       RobotResource = "immutable-tag"
+	RobotResourceRobot              RobotResource = "robot"
+	RobotResourceNotificationPolicy RobotResource = "notification-policy"
+	RobotResourceScan               RobotResource = "scan"
+	RobotResourceSBOM               RobotResource = "sbom"
+	RobotResourceScanner            RobotResource = "scanner"
+	RobotResourceArtifact           RobotResource = "artifact"
+	RobotResourceTag                RobotResource = "tag"
+	RobotResourceAccessory          RobotResource = "accessory"
+	RobotResourceArtifactAddition   RobotResource = "artifact-addition"
+	RobotResourceArtifactLabel      RobotResource = "artifact-label"
+	RobotResourcePreheatPolicy      RobotResource = "preheat-policy"
+	RobotResourcePreheatInstance    RobotResource = "preheat-instance"
+	RobotResourceAuditLog           RobotResource = "audit-log"
+	RobotResourceCatalog            RobotResource = "catalog"
+	RobotResourceProject            RobotResource = "project"
+	RobotResourceUser               RobotResource = "user"
+	RobotResourceUserGroup          RobotResource = "user-group"
+	RobotResourceRegistry           RobotResource = "registry"
+	RobotResourceReplication        RobotResource = "replication"
+	RobotResourceDistribution       RobotResource = "distribution"
+	RobotResourceGarbageCollection  RobotResource = "garbage-collection"
+	RobotResourceReplicationAdapter RobotResource = "replication-adapter"
+	RobotResourceReplicationPolicy  RobotResource = "replication-policy"
+	RobotResourceScanAll            RobotResource = "scan-all"
+	RobotResourceSystemVolumes      RobotResource = "system-volumes"
+	RobotResourcePurgeAudit         RobotResource = "purge-audit"
+	RobotResourceExportCVE          RobotResource = "export-cve"
+	RobotResourceJobServiceMonitor  RobotResource = "jobservice-monitor"
+	RobotResourceSecurityHub        RobotResource = "security-hub"
+)
+
+// RobotAccess defines a single access rule for a robot account.
+type RobotAccess struct {
+	// Resource defines the resource to grant access to.
+	// +kubebuilder:validation:Enum=*;configuration;label;log;ldap-user;member;metadata;quota;repository;tag-retention;immutable-tag;robot;notification-policy;scan;sbom;scanner;artifact;tag;accessory;artifact-addition;artifact-label;preheat-policy;preheat-instance;audit-log;catalog;project;user;user-group;registry;replication;distribution;garbage-collection;replication-adapter;replication-policy;scan-all;system-volumes;purge-audit;export-cve;jobservice-monitor;security-hub
+	Resource RobotResource `json:"resource"`
+
+	// Action defines the action to permit.
+	// +kubebuilder:validation:Enum=*;pull;push;create;read;update;delete;list;operate;scanner-pull;stop
+	Action RobotAction `json:"action"`
+
+	// Effect defines the effect of the access rule. Defaults to allow.
+	// +kubebuilder:default=allow
+	// +optional
+	Effect string `json:"effect,omitempty"`
+}
+
+// RobotPermission defines a permission block for a robot account.
+type RobotPermission struct {
+	// Kind defines the permission scope, such as "project" or "system".
+	// +kubebuilder:validation:MinLength=1
+	Kind string `json:"kind"`
+
+	// ProjectRef references the Project CR for project-scoped permissions.
+	// When omitted for kind=project, Harbor's native all-projects scope is used.
+	// +optional
+	ProjectRef *ProjectReference `json:"projectRef,omitempty"`
+
+	// Access lists the access rules for this permission.
+	// +kubebuilder:validation:MinItems=1
+	Access []RobotAccess `json:"access"`
+}
+
+// RobotSpec defines the desired state of Robot.
+// +kubebuilder:validation:XValidation:rule="self.duration == -1 || self.duration > 0",message="duration must be -1 or a positive integer"
+// +kubebuilder:validation:XValidation:rule="has(self.secretRef) || has(self.imagePullSecretRef)",message="at least one of secretRef or imagePullSecretRef must be set"
+type RobotSpec struct {
+	HarborSpecBase `json:",inline"`
+
+	// CreationPolicy controls whether the operator creates or adopts the Harbor robot.
+	// When omitted, the operator's default creation policy is used.
+	// +kubebuilder:validation:Enum=Create;Adopt;CreateOrAdopt
+	// +optional
+	CreationPolicy CreationPolicy `json:"creationPolicy,omitempty"`
+
+	// Description of the robot account.
+	// +optional
+	Description string `json:"description,omitempty"`
+
+	// Level is the scope of the robot account.
+	// Allowed values: "system", "project".
+	// +kubebuilder:validation:Enum=system;project
+	Level string `json:"level"`
+
+	// Permissions define the access granted to the robot account.
+	// +kubebuilder:validation:MinItems=1
+	Permissions []RobotPermission `json:"permissions"`
+
+	// Disable controls whether the robot account is disabled.
+	// When omitted, the operator leaves it unset on creation and preserves the current value on update.
+	// +optional
+	Disable *bool `json:"disable,omitempty"`
+
+	// Duration is the token duration in days. Use -1 for never expires.
+	// If omitted, it defaults to -1.
+	// +kubebuilder:default=-1
+	// +optional
+	Duration int `json:"duration,omitempty"`
+
+	// SecretRef references the operator-managed secret key holding the robot secret.
+	// The operator writes the generated robot secret to this location and expects
+	// the Secret to either not exist yet or already be managed by this Robot.
+	// The Secret also contains the canonical Harbor robot username under the
+	// reserved key "username".
+	// At least one of secretRef or imagePullSecretRef must be set.
+	// +optional
+	SecretRef *SecretReference `json:"secretRef,omitempty"`
+
+	// ImagePullSecretRef references the operator-managed Secret that contains
+	// a Kubernetes dockerconfigjson image-pull credential for this robot.
+	// The Secret is written with the Harbor registry host from the resolved
+	// Harbor connection and the current robot credentials. Its namespace
+	// defaults to the Robot namespace.
+	// +optional
+	ImagePullSecretRef *SecretObjectReference `json:"imagePullSecretRef,omitempty"`
+}
+
+// RobotStatus defines the observed state of Robot.
+type RobotStatus struct {
+	HarborStatusBase `json:",inline"`
+
+	// HarborRobotID is the ID of the robot in Harbor.
+	HarborRobotID int `json:"harborRobotID,omitempty"`
+
+	// Username is the canonical robot username reported by Harbor.
+	// +optional
+	Username string `json:"username,omitempty"`
+
+	// LastRotatedAt is the time when the robot secret was last rotated.
+	LastRotatedAt *metav1.Time `json:"lastRotatedAt,omitempty"`
+
+	// ExpiresAt is the expiration time reported by Harbor.
+	// +optional
+	ExpiresAt *metav1.Time `json:"expiresAt,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:categories=harbor
+// +kubebuilder:printcolumn:name="Name",type=string,JSONPath=`.metadata.name`
+// +kubebuilder:printcolumn:name="Username",type=string,JSONPath=`.status.username`
+// +kubebuilder:printcolumn:name="Level",type=string,JSONPath=`.spec.level`
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
+// +kubebuilder:printcolumn:name="Reason",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].reason`
+// +kubebuilder:printcolumn:name="Message",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,priority=1
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+
+// Robot is the Schema for the robots API.
+type Robot struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   RobotSpec   `json:"spec,omitempty"`
+	Status RobotStatus `json:"status,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+
+// RobotList contains a list of Robot.
+type RobotList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []Robot `json:"items"`
+}
+
+func init() {
+	SchemeBuilder.Register(&Robot{}, &RobotList{})
+}

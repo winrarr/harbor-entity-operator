@@ -1,0 +1,76 @@
+# Connection Patterns
+
+Every Harbor-backed custom resource references either a `HarborConnection` or a `ClusterHarborConnection`.
+
+## When to Use HarborConnection
+
+Use `HarborConnection` when:
+
+- the Harbor access should stay namespaced
+- credentials are tenant-local
+- you want each namespace to manage its own Harbor integration separately
+
+This is the safer default in multi-tenant clusters.
+
+## When to Use ClusterHarborConnection
+
+Use `ClusterHarborConnection` when:
+
+- multiple namespaces should share the same Harbor endpoint
+- the platform team manages the connection centrally
+- you want one shared Harbor definition reused across tenants or workloads
+
+## Credentials
+
+Connection credentials are stored in Kubernetes Secrets and referenced from the connection object.
+
+Typical pattern:
+
+- username in the CR
+- password or token in a Secret
+
+## CA Material
+
+If Harbor uses a custom CA, provide either:
+
+- `spec.caBundle`
+- or `spec.caBundleSecretRef`
+
+but not both.
+
+## Update Behavior
+
+When a `HarborConnection` or `ClusterHarborConnection` changes, dependent
+Harbor-backed resources are reconciled again. The connection `baseURL` is
+immutable; credential and CA material may change.
+
+Credential and CA Secrets are read during reconciliation. Secret changes do
+not themselves change the connection object, so trigger a dependent reconcile
+with `spec.reconcileNonce` or a configured drift interval when the update must
+be picked up immediately. A base URL change requires replacing the connection
+as an explicit migration; it is not an in-place update.
+
+## Cross-Namespace Sharing
+
+Cross-namespace sharing is not done through namespaced references. Instead:
+
+- use `HarborConnection` for namespaced local use
+- use `ClusterHarborConnection` when you intentionally want sharing
+
+## Operator-Wide Connection
+
+If you deploy the operator with `--harbor-connection=<name>`, every Harbor-backed
+resource uses that `ClusterHarborConnection`. In that mode, per-resource
+`spec.harborConnectionRef` is optional and must not point anywhere else.
+
+## Multi-Tenant Naming Policy
+
+If you need tenant-specific naming prefixes, reference boundaries, or Secret
+boundaries, enforce them at admission time with cluster policy such as Kyverno
+rather than encoding deployment-specific tenant policy into the operator. The
+operator normally treats `metadata.name` as the Harbor-side identity for named
+resources; `UserGroupClaim.spec.groupName` is the explicit exception. Kubernetes
+object refs are the way Harbor resources relate to each other.
+
+See [Multi-Tenancy](multi-tenancy.md) for a recommended deployment model and
+example Kyverno policies.

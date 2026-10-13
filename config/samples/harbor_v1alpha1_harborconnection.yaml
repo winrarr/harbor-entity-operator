@@ -1,0 +1,15 @@
+apiVersion: harbor.harbor-entity-operator.io/v1alpha1
+kind: HarborConnection
+metadata:
+  labels:
+    app.kubernetes.io/name: harbor-entity-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: harborconnection-sample
+spec:
+  baseURL: http://harbor-core.default.svc
+  credentials:
+    type: basic
+    username: admin
+    passwordSecretRef:
+      name: harbor-core
+      key: HARBOR_ADMIN_PASSWORD

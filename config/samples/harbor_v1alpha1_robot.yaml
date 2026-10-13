@@ -1,0 +1,25 @@
+apiVersion: harbor.harbor-entity-operator.io/v1alpha1
+kind: Robot
+metadata:
+  name: ci
+spec:
+  harborConnectionRef:
+    name: my-harbor
+    kind: HarborConnection
+  level: project
+  permissions:
+  - kind: project
+    projectRef:
+      name: project-sample
+    access:
+    - resource: repository
+      action: pull
+      effect: allow
+    - resource: repository
+      action: push
+      effect: allow
+  secretRef:
+    name: harbor-robot-ci
+    key: secret
+  imagePullSecretRef:
+    name: harbor-robot-ci-pull

@@ -1,43 +1,253 @@
 package controller
 
 import (
+	"context"
+	"errors"
 	"testing"
+	"time"
 
+	harborv1alpha1 "github.com/winrarr/harbor-entity-operator/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func TestConditionsReportKstatusLifecycle(t *testing.T) {
-	var conditions []metav1.Condition
-	markReconciling(&conditions, 3, "DependencyNotReady", "waiting for connection")
-	assertConditionStatus(t, conditions, ConditionReady, metav1.ConditionFalse)
-	assertConditionStatus(t, conditions, ConditionReconciling, metav1.ConditionTrue)
-	assertConditionStatus(t, conditions, ConditionStalled, metav1.ConditionFalse)
+func TestGetHarborAuthReadsUsernameAndPasswordFromSecret(t *testing.T) {
+	t.Parallel()
 
-	markReady(&conditions, 3, "resource is ready")
-	assertConditionStatus(t, conditions, ConditionReady, metav1.ConditionTrue)
-	assertConditionStatus(t, conditions, ConditionReconciling, metav1.ConditionFalse)
-	assertConditionStatus(t, conditions, ConditionStalled, metav1.ConditionFalse)
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add core scheme: %v", err)
+	}
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "robot-credentials", Namespace: "connections"},
+		Data: map[string][]byte{
+			"username": []byte("robot$tenant-operator"),
+			"secret":   []byte("token"),
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(secret).Build()
+	conn := &connectionConfig{
+		namespace:   "connections",
+		displayName: "test connection",
+		credentials: &harborv1alpha1.Credentials{
+			UsernameSecretRef: &harborv1alpha1.SecretReference{Name: "robot-credentials"},
+			PasswordSecretRef: harborv1alpha1.SecretReference{Name: "robot-credentials", Key: "secret"},
+		},
+	}
 
-	markStalled(&conditions, 4, "InvalidSpec", nil)
-	assertConditionStatus(t, conditions, ConditionReady, metav1.ConditionFalse)
-	assertConditionStatus(t, conditions, ConditionReconciling, metav1.ConditionFalse)
-	assertConditionStatus(t, conditions, ConditionStalled, metav1.ConditionTrue)
-	for _, condition := range conditions {
-		if condition.ObservedGeneration != 4 {
-			t.Fatalf("condition %s observed generation %d, want 4", condition.Type, condition.ObservedGeneration)
-		}
+	username, password, err := getHarborAuth(context.Background(), OperatorOptions{}, c, conn)
+	if err != nil {
+		t.Fatalf("getHarborAuth returned error: %v", err)
+	}
+	if username != "robot$tenant-operator" {
+		t.Fatalf("username = %q, want %q", username, "robot$tenant-operator")
+	}
+	if password != "token" {
+		t.Fatalf("password = %q, want %q", password, "token")
 	}
 }
 
-func assertConditionStatus(t *testing.T, conditions []metav1.Condition, conditionType string, expected metav1.ConditionStatus) {
-	t.Helper()
-	for _, condition := range conditions {
-		if condition.Type == conditionType {
-			if condition.Status != expected {
-				t.Fatalf("condition %s status %s, want %s", conditionType, condition.Status, expected)
-			}
-			return
-		}
+func TestFinalizeWithoutHarborConnection(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                 string
+		deletionPolicy       harborv1alpha1.DeletionPolicy
+		requiresRemoteDelete bool
+		wantDone             bool
+		wantFinalizer        bool
+	}{
+		{
+			name:                 "removes finalizer for local-only resources",
+			deletionPolicy:       harborv1alpha1.DeletionPolicyDelete,
+			requiresRemoteDelete: false,
+			wantDone:             true,
+			wantFinalizer:        false,
+		},
+		{
+			name:                 "keeps finalizer for remote cleanup resources with delete policy",
+			deletionPolicy:       harborv1alpha1.DeletionPolicyDelete,
+			requiresRemoteDelete: true,
+			wantDone:             false,
+			wantFinalizer:        true,
+		},
+		{
+			name:                 "removes finalizer for remote cleanup resources with orphan policy",
+			deletionPolicy:       harborv1alpha1.DeletionPolicyOrphan,
+			requiresRemoteDelete: true,
+			wantDone:             true,
+			wantFinalizer:        false,
+		},
 	}
-	t.Fatalf("condition %s not found in %#v", conditionType, conditions)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			scheme := runtime.NewScheme()
+			if err := harborv1alpha1.AddToScheme(scheme); err != nil {
+				t.Fatalf("add scheme: %v", err)
+			}
+
+			now := metav1.NewTime(time.Now())
+			obj := &harborv1alpha1.Project{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-project",
+					Namespace:         "default",
+					Finalizers:        []string{finalizerName},
+					DeletionTimestamp: &now,
+				},
+			}
+
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(obj.DeepCopy()).Build()
+			obj = &harborv1alpha1.Project{}
+			if err := c.Get(context.Background(), types.NamespacedName{Name: "test-project", Namespace: "default"}, obj); err != nil {
+				t.Fatalf("get current object: %v", err)
+			}
+			done, err := finalizeWithoutHarborConnection(
+				context.Background(),
+				c,
+				obj,
+				tt.deletionPolicy,
+				tt.requiresRemoteDelete,
+				apierrors.NewNotFound(schema.GroupResource{Group: harborv1alpha1.GroupVersion.Group, Resource: "harborconnections"}, "missing"),
+			)
+			if err != nil {
+				t.Fatalf("finalizeWithoutHarborConnection returned error: %v", err)
+			}
+			if done != tt.wantDone {
+				t.Fatalf("done = %v, want %v", done, tt.wantDone)
+			}
+
+			var stored harborv1alpha1.Project
+			err = c.Get(context.Background(), types.NamespacedName{Name: "test-project", Namespace: "default"}, &stored)
+			if !tt.wantFinalizer {
+				if !apierrors.IsNotFound(err) {
+					t.Fatalf("expected object to be deleted, got err=%v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("get stored object: %v", err)
+			}
+			hasFinalizer := false
+			for _, finalizer := range stored.Finalizers {
+				if finalizer == finalizerName {
+					hasFinalizer = true
+					break
+				}
+			}
+			if hasFinalizer != tt.wantFinalizer {
+				t.Fatalf("hasFinalizer = %v, want %v", hasFinalizer, tt.wantFinalizer)
+			}
+		})
+	}
+}
+
+func TestFinalizeIfDeleting(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		deletionPolicy harborv1alpha1.DeletionPolicy
+		deleteErr      error
+		wantDone       bool
+		wantErr        bool
+		wantDeleteCall bool
+		wantDeleted    bool
+	}{
+		{
+			name:           "delete policy runs remote cleanup before removing finalizer",
+			deletionPolicy: harborv1alpha1.DeletionPolicyDelete,
+			wantDone:       true,
+			wantDeleteCall: true,
+			wantDeleted:    true,
+		},
+		{
+			name:           "orphan policy skips remote cleanup and removes finalizer",
+			deletionPolicy: harborv1alpha1.DeletionPolicyOrphan,
+			wantDone:       true,
+			wantDeleteCall: false,
+			wantDeleted:    true,
+		},
+		{
+			name:           "delete policy keeps finalizer when remote cleanup fails",
+			deletionPolicy: harborv1alpha1.DeletionPolicyDelete,
+			deleteErr:      errors.New("boom"),
+			wantDone:       true,
+			wantErr:        true,
+			wantDeleteCall: true,
+			wantDeleted:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			scheme := runtime.NewScheme()
+			if err := harborv1alpha1.AddToScheme(scheme); err != nil {
+				t.Fatalf("add scheme: %v", err)
+			}
+
+			now := metav1.NewTime(time.Now())
+			obj := &harborv1alpha1.Project{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-project",
+					Namespace:         "default",
+					Finalizers:        []string{finalizerName},
+					DeletionTimestamp: &now,
+				},
+			}
+
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(obj.DeepCopy()).Build()
+			obj = &harborv1alpha1.Project{}
+			if err := c.Get(context.Background(), types.NamespacedName{Name: "test-project", Namespace: "default"}, obj); err != nil {
+				t.Fatalf("get current object: %v", err)
+			}
+
+			deleteCalled := false
+			done, err := finalizeIfDeleting(context.Background(), c, obj, tt.deletionPolicy, func() error {
+				deleteCalled = true
+				return tt.deleteErr
+			})
+
+			if done != tt.wantDone {
+				t.Fatalf("done = %v, want %v", done, tt.wantDone)
+			}
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if deleteCalled != tt.wantDeleteCall {
+				t.Fatalf("deleteCalled = %v, want %v", deleteCalled, tt.wantDeleteCall)
+			}
+
+			var stored harborv1alpha1.Project
+			err = c.Get(context.Background(), types.NamespacedName{Name: "test-project", Namespace: "default"}, &stored)
+			if tt.wantDeleted {
+				if !apierrors.IsNotFound(err) {
+					t.Fatalf("expected object to be deleted, got err=%v", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("get stored object: %v", err)
+			}
+			hasFinalizer := false
+			for _, finalizer := range stored.Finalizers {
+				if finalizer == finalizerName {
+					hasFinalizer = true
+					break
+				}
+			}
+			if !hasFinalizer {
+				t.Fatalf("expected finalizer to remain when deletion is blocked")
+			}
+		})
+	}
 }

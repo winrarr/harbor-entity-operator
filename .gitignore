@@ -1,29 +1,35 @@
-# Binaries and local build output
-bin/
-dist/
-site/
-cover.out
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/*
+Dockerfile.cross
+
+# Test binary, built with `go test -c`
 *.test
 
-# Local tools and caches
-.cache/
-.tmp/
-__pycache__/
-hack/*.tmp.*
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Go workspace file
 go.work
 
-# Kubernetes and local environment state
-*.kubeconfig
-/kind-*.yaml
-*.token
-*.secret
+# Python cache files
+__pycache__/
+*.py[cod]
 
-# Editor files
-.idea/
-.vscode/
+# Local GitHub App private keys
+*.private-key.pem
+
+# Kubernetes Generated files - skip generated files, except for vendored files
+!vendor/**/zz_generated.*
+
+# editor and IDE paraphernalia
+.idea
+.vscode
 *.swp
 *.swo
 *~
-
-# Generated API output is committed when it is part of the reference pattern.
-# Local generated files are protected by the Makefile drift check.
+site/

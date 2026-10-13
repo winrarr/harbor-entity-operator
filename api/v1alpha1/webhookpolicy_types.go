@@ -1,0 +1,111 @@
+package v1alpha1
+
+import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+// WebhookTargetSpec defines a single webhook target.
+// +kubebuilder:validation:XValidation:rule="!(has(self.authHeaderSecretRef) && size(self.authHeader) > 0)",message="authHeader and authHeaderSecretRef are mutually exclusive"
+type WebhookTargetSpec struct {
+	// Type defines the webhook notify type.
+	// +optional
+	Type string `json:"type,omitempty"`
+
+	// Address is the webhook target address.
+	// +optional
+	Address string `json:"address,omitempty"`
+
+	// AuthHeader is the auth header to send to the webhook target.
+	// +optional
+	AuthHeader string `json:"authHeader,omitempty"`
+
+	// AuthHeaderSecretRef references a secret value holding the auth header.
+	// +optional
+	AuthHeaderSecretRef *SecretReference `json:"authHeaderSecretRef,omitempty"`
+
+	// PayloadFormat is the payload format (e.g. CloudEvents).
+	// +optional
+	PayloadFormat string `json:"payloadFormat,omitempty"`
+
+	// SkipCertVerify disables TLS certificate verification for this target.
+	// Defaults to false. Enabling it is insecure.
+	// +kubebuilder:default=false
+	// +optional
+	SkipCertVerify bool `json:"skipCertVerify,omitempty"`
+}
+
+// WebhookPolicySpec defines the desired state of WebhookPolicy.
+// +kubebuilder:validation:XValidation:rule="has(self.projectRef)",message="projectRef is required"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.projectRef) || (has(self.projectRef) && self.projectRef == oldSelf.projectRef)",message="projectRef is immutable; delete and recreate the WebhookPolicy"
+type WebhookPolicySpec struct {
+	HarborSpecBase `json:",inline"`
+
+	// CreationPolicy controls whether the operator creates or adopts the Harbor webhook policy.
+	// When omitted, the operator's default creation policy is used.
+	// +kubebuilder:validation:Enum=Create;Adopt;CreateOrAdopt
+	// +optional
+	CreationPolicy CreationPolicy `json:"creationPolicy,omitempty"`
+
+	// ProjectRef references a Project CR to derive the Harbor project ID.
+	// +optional
+	ProjectRef *ProjectReference `json:"projectRef,omitempty"`
+
+	// Description is an optional policy description.
+	// +optional
+	Description string `json:"description,omitempty"`
+
+	// Enabled indicates whether the policy is enabled. Defaults to true.
+	// +kubebuilder:default=true
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+
+	// EventTypes lists the webhook event types.
+	// +kubebuilder:validation:MinItems=1
+	EventTypes []string `json:"eventTypes"`
+
+	// Targets lists the webhook targets.
+	// +kubebuilder:validation:MinItems=1
+	Targets []WebhookTargetSpec `json:"targets"`
+}
+
+// WebhookPolicyStatus defines the observed state of WebhookPolicy.
+type WebhookPolicyStatus struct {
+	HarborStatusBase `json:",inline"`
+
+	// HarborWebhookPolicyID is the ID of the webhook policy in Harbor.
+	HarborWebhookPolicyID int `json:"harborWebhookPolicyID,omitempty"`
+
+	// TargetsHash is a hash of the configured targets to detect changes.
+	// +optional
+	TargetsHash string `json:"targetsHash,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:categories=harbor
+// +kubebuilder:printcolumn:name="Project",type=string,JSONPath=`.spec.projectRef.name`
+// +kubebuilder:printcolumn:name="Enabled",type=boolean,JSONPath=`.spec.enabled`
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
+// +kubebuilder:printcolumn:name="Reason",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].reason`
+// +kubebuilder:printcolumn:name="Message",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,priority=1
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+
+// WebhookPolicy is the Schema for the webhookpolicies API.
+type WebhookPolicy struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   WebhookPolicySpec   `json:"spec,omitempty"`
+	Status WebhookPolicyStatus `json:"status,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+
+// WebhookPolicyList contains a list of WebhookPolicy.
+type WebhookPolicyList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []WebhookPolicy `json:"items"`
+}
+
+func init() {
+	SchemeBuilder.Register(&WebhookPolicy{}, &WebhookPolicyList{})
+}

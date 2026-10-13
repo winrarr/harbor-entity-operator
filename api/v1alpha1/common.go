@@ -1,0 +1,226 @@
+package v1alpha1
+
+import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+type HarborConnectionReferenceKind string
+
+const (
+	HarborConnectionReferenceKindNamespaced HarborConnectionReferenceKind = "HarborConnection"
+	HarborConnectionReferenceKindCluster    HarborConnectionReferenceKind = "ClusterHarborConnection"
+)
+
+// HarborConnectionBinding records the exact Kubernetes connection object used
+// for a Harbor-backed resource.
+type HarborConnectionBinding struct {
+	// Kind is either HarborConnection or ClusterHarborConnection.
+	Kind HarborConnectionReferenceKind `json:"kind"`
+	// Name is the name of the connection object.
+	Name string `json:"name"`
+	// Namespace is set for a namespaced HarborConnection.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+	// UID is the Kubernetes UID of the connection object.
+	UID string `json:"uid"`
+}
+
+type DeletionPolicy string
+
+const (
+	DeletionPolicyDelete DeletionPolicy = "Delete"
+	DeletionPolicyOrphan DeletionPolicy = "Orphan"
+)
+
+// CreationPolicy controls how the operator acquires a Harbor resource that is
+// not yet recorded in status.
+type CreationPolicy string
+
+const (
+	// CreationPolicyCreate creates a new Harbor resource and reports a conflict
+	// when a matching resource already exists.
+	CreationPolicyCreate CreationPolicy = "Create"
+	// CreationPolicyAdopt requires and adopts a matching Harbor resource without
+	// creating one when no match exists.
+	CreationPolicyAdopt CreationPolicy = "Adopt"
+	// CreationPolicyCreateOrAdopt adopts a matching Harbor resource when present
+	// and creates one otherwise.
+	CreationPolicyCreateOrAdopt CreationPolicy = "CreateOrAdopt"
+)
+
+// AllowsCreation reports whether the policy permits creating a Harbor resource.
+// The zero value is treated as Create. Controllers resolve operator defaults
+// before checking the policy.
+func (policy CreationPolicy) AllowsCreation() bool {
+	return policy == "" || policy == CreationPolicyCreate || policy == CreationPolicyCreateOrAdopt
+}
+
+// AllowsAdoption reports whether the policy permits adopting a Harbor resource.
+func (policy CreationPolicy) AllowsAdoption() bool {
+	return policy == CreationPolicyAdopt || policy == CreationPolicyCreateOrAdopt
+}
+
+// HarborConnectionReference identifies either a namespaced HarborConnection or a
+// cluster-scoped ClusterHarborConnection.
+type HarborConnectionReference struct {
+	// Name of the referenced Harbor connection object.
+	Name string `json:"name"`
+
+	// Kind selects the Harbor connection object kind.
+	// Defaults to HarborConnection.
+	// +kubebuilder:default=HarborConnection
+	// +kubebuilder:validation:Enum=HarborConnection;ClusterHarborConnection
+	// +optional
+	Kind HarborConnectionReferenceKind `json:"kind,omitempty"`
+}
+
+func (r HarborConnectionReference) IsZero() bool {
+	return r.Name == "" && r.Kind == ""
+}
+
+// HarborSpecBase holds the fields that appear in every Harbor CR.
+type HarborSpecBase struct {
+	// HarborConnectionRef references the Harbor connection object to use.
+	// When the operator is started with --harbor-connection, this field may be omitted.
+	// +optional
+	HarborConnectionRef *HarborConnectionReference `json:"harborConnectionRef,omitempty"`
+
+	// DeletionPolicy controls what happens when the Kubernetes object is deleted.
+	// Delete removes the corresponding Harbor resource before removing the finalizer.
+	// Orphan skips Harbor-side deletion and removes the finalizer so the
+	// Kubernetes object can be deleted while leaving the Harbor resource in place.
+	// Defaults to Delete.
+	// +kubebuilder:default=Delete
+	// +kubebuilder:validation:Enum=Delete;Orphan
+	// +optional
+	DeletionPolicy DeletionPolicy `json:"deletionPolicy,omitempty"`
+
+	// DriftDetectionInterval is the interval at which the operator checks for drift.
+	// When omitted, the operator's default drift detection interval is used.
+	// An explicit value of 0 disables periodic drift detection.
+	// +optional
+	DriftDetectionInterval *metav1.Duration `json:"driftDetectionInterval,omitempty"`
+
+	// ReconcileNonce forces an immediate reconcile when updated.
+	// +optional
+	ReconcileNonce string `json:"reconcileNonce,omitempty"`
+}
+
+// HarborClaimSpecBase is the common spec for non-owning claims of Harbor
+// global identities. Claims select a connection and drift interval, but never
+// delete the global Harbor object when the claim is deleted.
+type HarborClaimSpecBase struct {
+	// HarborConnectionRef references the Harbor connection object to use.
+	// When the operator is started with --harbor-connection, this field may be omitted.
+	// +optional
+	HarborConnectionRef *HarborConnectionReference `json:"harborConnectionRef,omitempty"`
+
+	// DriftDetectionInterval is the interval at which the operator checks for drift.
+	// +optional
+	DriftDetectionInterval *metav1.Duration `json:"driftDetectionInterval,omitempty"`
+
+	// ReconcileNonce forces an immediate reconcile when updated.
+	// +optional
+	ReconcileNonce string `json:"reconcileNonce,omitempty"`
+}
+
+// SecretReference is similar to a corev1.SecretKeySelector but allows
+// cross-namespace references when enabled in the operator RBAC.
+type SecretReference struct {
+	// Name of the Secret.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+	// Key inside the Secret data. When omitted, the controller using this
+	// reference will apply a sensible default.
+	// +optional
+	Key string `json:"key,omitempty"`
+	// Namespace of the Secret. When omitted, the controller uses the namespace of
+	// the referencing namespaced resource. References from cluster-scoped resources
+	// must set this field explicitly because they have no namespace.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
+// SecretObjectReference identifies a Secret object without selecting a key.
+// It is used for operator-managed Secret outputs whose data shape is fixed by
+// the referencing resource.
+type SecretObjectReference struct {
+	// Name of the Secret.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+	// Namespace of the Secret. When omitted, the controller uses the namespace
+	// of the referencing namespaced resource.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
+// ProjectReference identifies a Project custom resource.
+type ProjectReference struct {
+	// Name of the Project resource.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+	// Namespace of the Project resource. Defaults to the referencing resource namespace.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
+// RegistryReference identifies a Registry custom resource.
+type RegistryReference struct {
+	// Name of the Registry resource.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+	// Namespace of the Registry resource. Defaults to the referencing resource namespace.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
+// UserReference identifies a User custom resource.
+type UserReference struct {
+	// Name of the User resource.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+	// Namespace of the User resource. Defaults to the referencing resource namespace.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
+// UserGroupClaimReference identifies a UserGroupClaim custom resource.
+type UserGroupClaimReference struct {
+	// Name of the UserGroupClaim resource.
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+	// Namespace of the UserGroupClaim resource. Defaults to the referencing resource namespace.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
+// HarborStatusBase holds common status fields for Harbor resources.
+type HarborStatusBase struct {
+	// ObservedGeneration is the most recent generation observed by the controller.
+	// +optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Conditions represent the latest available observations of the resource's state.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// ResolvedHarborConnection is the exact connection identity used for Harbor
+	// operations. Once set, changing the effective connection is refused.
+	// +optional
+	ResolvedHarborConnection *HarborConnectionBinding `json:"resolvedHarborConnection,omitempty"`
+}
+
+// GetDriftDetectionInterval returns the drift detection interval.
+func (base *HarborSpecBase) GetDriftDetectionInterval() *metav1.Duration {
+	return base.DriftDetectionInterval
+}
+
+// GetDriftDetectionInterval returns the claim drift detection interval.
+func (base *HarborClaimSpecBase) GetDriftDetectionInterval() *metav1.Duration {
+	return base.DriftDetectionInterval
+}
+
+func (base *HarborSpecBase) GetDeletionPolicy() DeletionPolicy {
+	if base.DeletionPolicy == "" {
+		return DeletionPolicyDelete
+	}
+	return base.DeletionPolicy
+}

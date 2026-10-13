@@ -1,0 +1,16 @@
+apiVersion: harbor.harbor-entity-operator.io/v1alpha1
+kind: PreheatInstance
+metadata:
+  name: dragonfly-sample
+spec:
+  harborConnectionRef:
+    name: clusterharborconnection-sample
+    kind: ClusterHarborConnection
+  vendor: dragonfly
+  endpoint: https://dragonfly.example.com
+  authMode: BASIC
+  authInfoSecretRef:
+    name: preheat-auth-sample
+    namespace: default
+  enabled: true
+  default: false

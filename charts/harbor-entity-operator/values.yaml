@@ -1,0 +1,102 @@
+image:
+  repository: ghcr.io/winrarr/harbor-entity-operator
+  # If set, digest takes precedence over tag.
+  tag: ""
+  digest: ""
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+replicaCount: 1
+
+metrics:
+  enabled: false
+  secure: true
+  port: 8443
+  tls:
+    # Existing kubernetes.io/tls Secret used by the secure metrics server.
+    # When empty, controller-runtime generates a development certificate.
+    certificateSecret: ""
+  readerRole:
+    create: true
+    binding:
+      # The chart cannot safely infer the Prometheus service account.
+      create: false
+      serviceAccount:
+        name: ""
+        namespace: ""
+  serviceMonitor:
+    enabled: false
+    namespace: ""
+    interval: 30s
+    scrapeTimeout: 10s
+    honorLabels: false
+    labels: {}
+    annotations: {}
+    # The projected token of the Prometheus pod. Set to an empty string when
+    # providing another authorization mechanism in endpointAdditionalProperties.
+    bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+    tlsConfig:
+      # controller-runtime's generated certificate is intended for development
+      # and cannot be verified through the metrics Service DNS name.
+      insecureSkipVerify: true
+    relabelings: []
+    metricRelabelings: []
+    endpointAdditionalProperties: {}
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+serviceAccount:
+  create: true
+  # If empty and create=true, the chart fullname is used.
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+priorityClassName: ""
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - "ALL"
+
+env: []
+
+watchNamespaces: []
+
+harborConnection: ""
+
+# Used when a Harbor resource omits spec.creationPolicy.
+defaultCreationPolicy: Create
+
+# Allow namespaced Harbor resources to reference objects in other namespaces.
+allowCrossNamespaceReferences: true
+
+# Used when a Harbor resource omits spec.driftDetectionInterval. Set to 0s to disable periodic drift detection by default.
+defaultDriftDetectionInterval: 0s
+
+harborRequestTimeout: 30s
+
+pdb:
+  enabled: false
+  minAvailable: 1
+  maxUnavailable: ""
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+topologySpreadConstraints: []

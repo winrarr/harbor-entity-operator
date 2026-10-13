@@ -1,0 +1,9 @@
+apiVersion: harbor.harbor-entity-operator.io/v1alpha1
+kind: HarborUserGroup
+metadata:
+  name: developers
+spec:
+  harborConnectionRef:
+    name: clusterharborconnection-sample
+    kind: ClusterHarborConnection
+  groupType: 2

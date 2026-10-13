@@ -1,0 +1,56 @@
+package harborclient
+
+import (
+	"context"
+	"fmt"
+)
+
+// WebhookTarget defines a webhook target.
+type WebhookTarget struct {
+	Type           string `json:"type,omitempty"`
+	Address        string `json:"address,omitempty"`
+	AuthHeader     string `json:"auth_header,omitempty"`
+	PayloadFormat  string `json:"payload_format,omitempty"`
+	SkipCertVerify bool   `json:"skip_cert_verify,omitempty"`
+}
+
+// WebhookPolicy represents a webhook policy.
+type WebhookPolicy struct {
+	ID           int             `json:"id,omitempty"`
+	Name         string          `json:"name,omitempty"`
+	Description  string          `json:"description,omitempty"`
+	ProjectID    int             `json:"project_id,omitempty"`
+	Targets      []WebhookTarget `json:"targets,omitempty"`
+	EventTypes   []string        `json:"event_types,omitempty"`
+	Creator      string          `json:"creator,omitempty"`
+	CreationTime string          `json:"creation_time,omitempty"`
+	UpdateTime   string          `json:"update_time,omitempty"`
+	Enabled      bool            `json:"enabled,omitempty"`
+}
+
+// ListWebhookPolicies lists webhook policies for a project.
+func (c *Client) ListWebhookPolicies(ctx context.Context, projectRef string) ([]WebhookPolicy, error) {
+	return getPaged[WebhookPolicy](ctx, c, fmt.Sprintf("/api/v2.0/projects/%s/webhook/policies", projectRef), nil)
+}
+
+// GetWebhookPolicy retrieves a webhook policy by ID.
+func (c *Client) GetWebhookPolicy(ctx context.Context, projectRef string, id int) (*WebhookPolicy, error) {
+	var out WebhookPolicy
+	err := c.get(ctx, fmt.Sprintf("/api/v2.0/projects/%s/webhook/policies/%d", projectRef, id), &out)
+	return &out, err
+}
+
+// CreateWebhookPolicy creates a webhook policy.
+func (c *Client) CreateWebhookPolicy(ctx context.Context, projectRef string, in WebhookPolicy) (int, error) {
+	return c.createWithNumericLocationID(ctx, fmt.Sprintf("/api/v2.0/projects/%s/webhook/policies", projectRef), &in)
+}
+
+// UpdateWebhookPolicy updates a webhook policy.
+func (c *Client) UpdateWebhookPolicy(ctx context.Context, projectRef string, id int, in WebhookPolicy) error {
+	return c.put(ctx, fmt.Sprintf("/api/v2.0/projects/%s/webhook/policies/%d", projectRef, id), &in)
+}
+
+// DeleteWebhookPolicy deletes a webhook policy.
+func (c *Client) DeleteWebhookPolicy(ctx context.Context, projectRef string, id int) error {
+	return c.deleteIgnoringNotFound(ctx, fmt.Sprintf("/api/v2.0/projects/%s/webhook/policies/%d", projectRef, id))
+}

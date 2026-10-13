@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: harbor-user-password
+type: Opaque
+stringData:
+  password: Password123!
+---
+apiVersion: harbor.harbor-entity-operator.io/v1alpha1
+kind: User
+metadata:
+  labels:
+    app.kubernetes.io/name: harbor-entity-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: user-sample
+spec:
+  harborConnectionRef:
+    name: harborconnection-sample
+    kind: HarborConnection
+  email: example@email.com
+  passwordSecretRef:
+    name: harbor-user-password
+    key: password
+  realname: User Sample

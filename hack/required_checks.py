@@ -13,15 +13,7 @@ import time
 from collections.abc import Callable, Iterable
 
 
-DEFAULT_REQUIRED_CHECKS = (
-    "Build documentation",
-    "Lint",
-    "Generated assets",
-    "Unit and contract tests",
-    "Kind cluster and installation",
-    "Source vulnerability scan",
-    "Image vulnerability scan and SBOM",
-)
+DEFAULT_REQUIRED_CHECKS = ("docs", "lint", "verify-generated", "test", "test-e2e")
 
 
 def run_out(args: list[str]) -> str:

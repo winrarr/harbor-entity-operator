@@ -1,0 +1,120 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "harbor-entity-operator.fullname" . }}
+  labels:
+{{ include "harbor-entity-operator.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "harbor-entity-operator.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "harbor-entity-operator.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+{{- if .Values.podLabels }}
+{{ toYaml .Values.podLabels | indent 8 }}
+{{- end }}
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+{{- if .Values.podAnnotations }}
+{{ toYaml .Values.podAnnotations | nindent 8 }}
+{{- end }}
+    spec:
+      serviceAccountName: {{ include "harbor-entity-operator.serviceAccountName" . }}
+      securityContext:
+{{ toYaml .Values.podSecurityContext | nindent 8 }}
+{{- if .Values.image.pullSecrets }}
+      imagePullSecrets:
+{{ toYaml .Values.image.pullSecrets | nindent 8 }}
+{{- end }}
+{{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName }}
+{{- end }}
+{{- $imageTag := default .Chart.AppVersion .Values.image.tag -}}
+{{- $image := printf "%s:%s" .Values.image.repository $imageTag -}}
+{{- if .Values.image.digest -}}
+{{- $image = printf "%s@%s" .Values.image.repository .Values.image.digest -}}
+{{- end }}
+      containers:
+        - name: manager
+          image: {{ $image | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - /manager
+          args:
+            - --leader-elect=true
+            - --health-probe-bind-address=:8081
+            {{- if gt (len .Values.watchNamespaces) 0 }}
+            - --watch-namespaces={{ join "," .Values.watchNamespaces }}
+            {{- end }}
+            {{- if .Values.harborConnection }}
+            - --harbor-connection={{ .Values.harborConnection }}
+            {{- end }}
+            - --default-creation-policy={{ .Values.defaultCreationPolicy }}
+            - --allow-cross-namespace-references={{ .Values.allowCrossNamespaceReferences }}
+            - --default-drift-detection-interval={{ .Values.defaultDriftDetectionInterval }}
+            - --harbor-request-timeout={{ .Values.harborRequestTimeout }}
+            {{- if .Values.metrics.enabled }}
+            - --metrics-bind-address=:{{ .Values.metrics.port }}
+            - --metrics-secure={{ .Values.metrics.secure }}
+            {{- if and .Values.metrics.secure .Values.metrics.tls.certificateSecret }}
+            - --metrics-cert-path=/tmp/k8s-metrics-server/serving-certs
+            {{- end }}
+            {{- else }}
+            - --metrics-bind-address=0
+            {{- end }}
+          {{- if .Values.env }}
+          env:
+{{ toYaml .Values.env | nindent 12 }}
+          {{- end }}
+          {{- if .Values.metrics.enabled }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+              protocol: TCP
+          {{- else }}
+          ports: []
+          {{- end }}
+          securityContext:
+{{ toYaml .Values.containerSecurityContext | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+{{ toYaml .Values.resources | nindent 12 }}
+          {{- if and .Values.metrics.enabled .Values.metrics.secure .Values.metrics.tls.certificateSecret }}
+          volumeMounts:
+            - name: metrics-certificate
+              mountPath: /tmp/k8s-metrics-server/serving-certs
+              readOnly: true
+          {{- end }}
+{{- if and .Values.metrics.enabled .Values.metrics.secure .Values.metrics.tls.certificateSecret }}
+      volumes:
+        - name: metrics-certificate
+          secret:
+            secretName: {{ .Values.metrics.tls.certificateSecret }}
+{{- end }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | nindent 8 }}
+      tolerations:
+{{ toYaml .Values.tolerations | nindent 8 }}
+      affinity:
+{{ toYaml .Values.affinity | nindent 8 }}
+{{- if .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+{{ toYaml .Values.topologySpreadConstraints | nindent 8 }}
+{{- end }}
+      terminationGracePeriodSeconds: 10

@@ -1,36 +1,23 @@
 # Architecture
 
-Operator Foundry has two related purposes:
-
-1. provide a usable repository baseline for a new operator;
-2. provide concrete reference patterns for agents and maintainers.
-
-The active Go code demonstrates a small external-system operator shape with a separate relationship claim:
+Harbor Entity Operator is a controller-runtime application that turns Kubernetes desired state into Harbor API v2 operations.
 
 ```text
-Kubernetes Secret → PatternConnection → PatternResource and PatternMembership reconcilers → typed external client → mock external API in E2E
+Kubernetes custom resources and Secrets
+                 ↓
+      controller-runtime reconcilers
+                 ↓
+ Harbor connection resolution and client
+                 ↓
+          Harbor API v2.0
 ```
 
-The example API and controllers are deliberately generic. They demonstrate how the layers fit together, but they do not define the API of future operators.
+The public API under `api/v1alpha1` defines the CRDs. `internal/controller` owns reference resolution, lifecycle, finalizers, status, and drift handling. `internal/harborclient` contains Harbor HTTP contracts, pagination, and error handling. `charts/harbor-entity-operator` and `config/` are generated or packaged installation surfaces. `hack/harbor-openapi.yaml` is the official Harbor API reference used during implementation; CRDs are designed in Go and are not generated mechanically from the Swagger document.
 
-## Boundaries
+The operator manages Harbor's control plane, not the registry data plane. Harbor remains authoritative for artifacts, repository contents, scans, and one-shot jobs. A Harbor custom resource records desired configuration, while status records Harbor identities and conditions needed for subsequent reconciliation.
 
-- `api/patterns/v1alpha1` contains the reference custom resources and their Kubernetes contract, including one-resource relationship claims.
-- `internal/controller` contains condition, dependency, lifecycle, namespace-scope, and reconciliation patterns.
-- `internal/exampleclient` contains a deliberately small typed HTTP client surface.
-- `internal/mockexternalapi` and `cmd/mockexternalapi` contain the disposable external system used only by live tests.
-- `config/` and `charts/` contain installation and generated delivery assets.
-- `docs/patterns/` explains when the reference patterns are useful and what must be reconsidered.
-- `PROJECT_KICKOFF.md` is the source of truth for how a new operator should use this repository.
+Every Harbor-backed resource selects a namespaced `HarborConnection` or cluster-scoped `ClusterHarborConnection`. Namespaced references are checked against the operator's cross-namespace policy. Secrets hold credentials and generated robot outputs. Cluster-wide Harbor APIs use singleton ownership checks so multiple Kubernetes resources cannot silently overwrite the same Harbor setting.
 
-Generated files are derived from API types, controller markers, and documentation configuration. Change their sources and regenerate; do not hand-edit generated CRDs, RBAC, deepcopy code, or the API reference.
+Named Harbor objects generally use `metadata.name` as their remote identity. Resources that manage a relationship use Kubernetes references and the resolved Harbor IDs of their dependencies. Finalizers preserve cleanup obligations; `deletionPolicy: Orphan` releases those obligations without deleting the remote object. Existing-object behavior is controlled by the resource's creation policy.
 
-The mock API has a separate administrative surface for deterministic E2E setup, remote deletion, and one-shot failure injection. It is not part of the operator's production surface and should not be used as an external API design authority.
-
-## Design principles
-
-- Treat the external system's semantics as authoritative.
-- Keep Kubernetes API design, client behavior, reconciliation, status, tests, and documentation as one contract.
-- Prefer explicit ownership and deletion decisions over accidental external mutations.
-- Make errors observable through status without leaking credentials.
-- Keep the reference examples available while a new project is being designed and implemented.
+For the concrete resource graph and boundaries, see [Technical Architecture](technical-architecture.md). For the upstream endpoint mapping and coverage decisions, see [Harbor API coverage](research/harbor-api-coverage.md).

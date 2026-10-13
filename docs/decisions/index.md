@@ -1,5 +1,15 @@
-# Decisions
+# Architecture Decision Records
 
-Record one consequential accepted decision per file. Include status, date, decision, rationale, alternatives considered, and relevant constraints. Use a design document while alternatives remain unsettled, then record the accepted choice here.
+Architecture decision records preserve consequential choices whose alternatives and rationale may matter to future changes. They complement current documentation: code and tests describe what exists, while an ADR explains why a durable choice was made.
 
-- [0001. Use one repository as both reference and template](0001-reference-template.md)
+Create one numbered Markdown file per accepted or proposed decision, using a short descriptive name such as `0001-resource-identity.md`. Include:
+
+- status and date
+- the decision and its scope
+- relevant constraints and credible alternatives
+- rationale and consequences
+- links to superseded or superseding decisions when applicable
+
+Do not use ADRs for routine implementation details, unmade decisions, work instructions, or completed-task history. Do not rewrite an accepted ADR when the decision changes; add a new ADR that supersedes it.
+
+- [0001. Model Harbor control-plane desired state](0001-harbor-api-surface.md)

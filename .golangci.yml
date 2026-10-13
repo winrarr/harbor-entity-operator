@@ -5,40 +5,43 @@ linters:
   default: none
   enable:
     - copyloopvar
-    - depguard
     - dupl
     - errcheck
+    - ginkgolinter
+    - goconst
     - gocyclo
     - govet
     - ineffassign
+    - lll
     - misspell
+    - nakedret
+    - prealloc
     - revive
     - staticcheck
     - unconvert
     - unparam
     - unused
   settings:
-    depguard:
-      rules:
-        main:
-          list-mode: lax
-          deny:
-            - pkg: io/ioutil
-              desc: use io and os packages instead
     revive:
       rules:
         - name: comment-spacings
-        - name: import-shadowing
   exclusions:
     generated: lax
     rules:
       - linters:
-          - dupl
-          - gocyclo
-        path: internal/*
-      - linters:
           - lll
         path: api/*
+      - linters:
+          - dupl
+          - lll
+        path: internal/.*
+      - linters:
+          - goconst
+        path: '.*_test\.go'
+      - linters:
+          - revive
+        path: internal/controller/.*_test\.go
+        text: "dot-imports:"
     paths:
       - third_party$
       - builtin$

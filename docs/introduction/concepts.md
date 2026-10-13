@@ -1,0 +1,64 @@
+# Concepts
+
+## Connection Objects
+
+Every Harbor-backed custom resource points at a connection object.
+
+- `HarborConnection` is namespaced and suited for tenant-local usage
+- `ClusterHarborConnection` is cluster-scoped and suited for shared Harbor instances
+
+The connection object carries the base URL, optional credentials, and optional CA material used to construct the Harbor client.
+
+## Desired State Model
+
+The operator treats Kubernetes custom resources as desired state and Harbor as the external system being reconciled.
+
+That means:
+
+- edits in Kubernetes drive Harbor changes
+- Harbor-side drift is corrected on reconcile
+- connection changes also trigger reconcile of dependent resources
+- `metadata.name` is the Harbor identity for named resources such as `Project`,
+  `Registry`, `User`, `Label`, `Robot`, `ReplicationPolicy`, and
+  `ScannerRegistration`, and `WebhookPolicy`
+- `UserGroupClaim` uses `metadata.name` as its Kubernetes reference identity and
+  `spec.groupName` as the exact group identity stored in Harbor. Claims are
+  non-owning and reusable across namespaces.
+- inter-resource relationships should use Kubernetes object references and the
+  referenced object status rather than free-form Harbor identifiers
+
+See [Technical Architecture](../technical-architecture.md#custom-resource-relationships)
+for a diagram of the complete custom-resource graph.
+
+## Resource Ownership
+
+Some resources map cleanly to independently managed Harbor objects:
+
+- `Project`
+- `Registry`
+- `User`
+- `Robot`
+- `Member`
+- `Label`
+
+Others map to singleton-style Harbor APIs:
+
+- `Configuration`
+- `GCSchedule`
+- `PurgeAuditSchedule`
+- `ScanAllSchedule`
+
+Singleton resources are unique per Harbor instance. If multiple CRs target the same Harbor instance for the same singleton API, the oldest CR keeps ownership and later CRs report a conflict.
+
+## Deletion Semantics
+
+`spec.deletionPolicy` controls what happens when a Kubernetes object is deleted:
+
+- `Delete` is the default and attempts Harbor cleanup before removing the finalizer
+- `Orphan` removes the Kubernetes object without deleting the corresponding Harbor object
+
+This matters mainly when Harbor is unreachable or the referenced connection object has already been removed.
+
+## Secret Ownership
+
+Robot credentials are operator-managed output, not input. The operator writes the destination secret and manages password generation and rotation rather than consuming an arbitrary existing password secret.

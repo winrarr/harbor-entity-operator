@@ -1,0 +1,14 @@
+apiVersion: harbor.harbor-entity-operator.io/v1alpha1
+kind: ScannerRegistration
+metadata:
+  labels:
+    app.kubernetes.io/name: harbor-entity-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: scannerregistration-sample
+spec:
+  harborConnectionRef:
+    name: harborconnection-sample
+    kind: HarborConnection
+  url: http://harbor-scanner-trivy:8080
+  auth: Bearer
+  accessCredential: dummy-token

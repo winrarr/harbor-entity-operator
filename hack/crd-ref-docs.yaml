@@ -2,9 +2,11 @@ processor:
   ignoreTypes:
     - ".*List$"
     - ".*Status$"
+    - "HarborStatusBase$"
+    - "HarborConnectionBinding$"
   ignoreFields:
     - "TypeMeta$"
     - "ObjectMeta$"
 render:
-# renovate: datasource=go depName=k8s.io/api
-  kubernetesVersion: "1.37"
+  # renovate: datasource=go depName=k8s.io/api
+  kubernetesVersion: "1.36"

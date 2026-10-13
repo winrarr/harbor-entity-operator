@@ -1,0 +1,16 @@
+apiVersion: harbor.harbor-entity-operator.io/v1alpha1
+kind: HarborRole
+metadata:
+  name: release-reader
+spec:
+  harborConnectionRef:
+    name: clusterharborconnection-sample
+    kind: ClusterHarborConnection
+  description: Read-only role for release metadata
+  permissions:
+    - kind: project-role
+      namespace: "*"
+      access:
+        - resource: member
+          action: read
+          effect: allow

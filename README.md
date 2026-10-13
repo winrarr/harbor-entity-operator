@@ -1,52 +1,46 @@
-# Operator Foundry
+# Harbor Entity Operator
 
-Operator Foundry is a public reference repository and GitHub template for building Kubernetes operators with a strong engineering and documentation baseline.
+`harbor-entity-operator` manages resources in an existing Harbor installation through Kubernetes custom resources. It does not install Harbor outside the repository's local development environment.
 
-It is intentionally opinionated about the parts that benefit from consistency: repository structure, Go and controller-runtime conventions, status reporting, testing, generated artifacts, documentation, local Kubernetes workflows, and agent-oriented project startup. It is deliberately not a universal operator framework. The reference patterns are starting points to evaluate against the new external system.
+The repository uses the [Operator Foundry](https://github.com/winrarr/operator-foundry) engineering foundation and Harbor's official [v2 API specification](https://github.com/goharbor/harbor/blob/main/api/v2.0/swagger.yaml).
 
-## Starting a new operator
+The operator provides namespaced `HarborConnection` and cluster-scoped `ClusterHarborConnection` resources for Harbor access. Resources for projects, users, groups, custom roles, robots, registries, policies, quotas, schedules, the system CVE allowlist, and P2P preheat reference one of those connections and reconcile desired state through Harbor's API. See the [Harbor API coverage review](docs/research/harbor-api-coverage.md) for the resource boundary and endpoint mapping.
 
-Use GitHub's **Use this template** action to create a new repository, then give the first coding agent the operator's north-star goal. The agent should begin with [PROJECT_KICKOFF.md](PROJECT_KICKOFF.md), which guides user-story discovery, external-system research, pattern selection, first-slice planning, and implementation.
+## Run locally
 
-The example API and controllers in this repository are reference material. Keep them available while the new project becomes solid; adapt or remove them only when the new project's design makes that appropriate. Do not treat any example resource as a requirement.
-
-## What this repository demonstrates
-
-- kstatus-compatible `Ready`, `Reconciling`, and `Stalled` conditions;
-- typed external API clients with explicit request and response contracts;
-- connection and Secret-reference handling;
-- adoption, orphaning, deletion, finalizers, and drift detection;
-- dependency readiness and reconciliation retries;
-- one-edge relationship claims and optional namespace-scoped tenant access;
-- fake-client, HTTP contract, and in-cluster operational tests;
-- generated CRDs, RBAC, API reference documentation, Helm, and Kustomize;
-- optional secure metrics, Prometheus `ServiceMonitor`, and network-policy
-  integration;
-- Renovate-managed dependency updates, vulnerability scans, image SBOMs, and
-  an optional Cosign/provenance release path;
-- strict documentation validation and GitHub Pages publication;
-- a disposable mock external API and Kind golden-path E2E matrix.
-
-The lifecycle patterns are intentionally demonstrated because they are useful for most external-system operators, but every new operator must validate their semantics and scope before adopting them.
-
-The reference E2E is the confidence path for this repository. It installs the operator into Kind, drives the example resources against the disposable mock API, and checks the observable lifecycle. The optional local Cilium mode additionally checks Hubble readiness and a metrics NetworkPolicy allow/deny boundary; the [network-policy pattern](docs/patterns/kind-and-network-policy.md) explains how to use Hubble dropped flows to discover stricter policies.
-
-## Local development
+Create a Kind cluster with Harbor and the operator installed:
 
 ```sh
-make check
-make build
-make docs-build
-make helm-lint
-make helm-template
+make kind-up
 ```
 
-See [the documentation map](docs/index.md) for the durable project knowledge and [PROJECT_KICKOFF.md](PROJECT_KICKOFF.md) for the development workflow.
+The local workflow and live tests are described in [Local Development](docs/contributing/local-development.md).
 
-## Inspiration
+## Install a published release
 
-The initial conventions were distilled from the Harbor Operator, Infisical Entity Operator, and OpenBao Entity Operator. Those projects remain useful references for concrete patterns, but external projects and this repository are evidence and inspiration—not authorities for a new operator's API or lifecycle semantics.
+After an OCI chart release has been published, install it into a cluster that can reach Harbor:
 
-## License
+```sh
+helm registry login ghcr.io
+helm upgrade --install harbor-entity-operator oci://ghcr.io/winrarr/charts/harbor-entity-operator \
+  --namespace harbor-entity-operator-system \
+  --create-namespace \
+  --version <chart-version>
+```
 
-Apache License 2.0. See [LICENSE](LICENSE).
+Create a `HarborConnection` or `ClusterHarborConnection`, then create Harbor resources that reference it. See the [quickstart](docs/quickstart.md) for the shortest complete path and the [installation guide](docs/introduction/installation.md) for chart configuration.
+
+## Documentation
+
+The [documentation site](https://winrarr.github.io/harbor-entity-operator/) contains:
+
+- installation and core concepts
+- resource guides and examples
+- generated API reference
+- connection, ownership, deletion, and multi-tenancy behavior
+
+The Go API types and Kubebuilder markers under `api/v1alpha1` define the public Kubernetes API. The generated [API reference](docs/reference/api.md) documents that schema, while the hand-written guides explain behavior and Harbor semantics.
+
+## Development
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the contributor contract and [local development](docs/contributing/local-development.md) for the Kind-based workflow.

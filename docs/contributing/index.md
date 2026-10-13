@@ -1,15 +1,14 @@
 # Contributing
 
-Keep source code, tests, documentation, generated assets, and workflows
-synchronized. Use the repository's canonical Make targets and preserve the
-distinction between source files and generated output.
+This section summarizes the contributor workflow without forcing you to read the entire repository root documentation first.
 
-When adding a reusable workflow, put durable instructions in a focused repo-local
-skill under `.agents/skills/` and keep `AGENTS.md` as a pointer to the kickoff
-document.
+Use it for:
 
-Release branches, publication, and the patch train are optional. See
-[optional release automation](releases.md) before enabling that pattern.
+- local Kind-based development
+- testing and verification expectations
+- docs generation and publishing details
+- operator and Helm chart releases
 
-The local security checks and optional release signing/attestation pattern are
-documented in [supply-chain verification](../patterns/supply-chain.md).
+For the full contributor contract, also see [`CONTRIBUTING.md`](https://github.com/winrarr/harbor-entity-operator/blob/main/CONTRIBUTING.md).
+
+The published docs site tracks `main`. Historical docs are expected to be read from the repository at the relevant tag or commit.

@@ -1,7 +1,0 @@
-apiVersion: v2
-name: operator-foundry
-description: Reference Helm chart for the Operator Foundry pattern operator
-type: application
-version: 0.1.0
-appVersion: "0.1.0"
-kubeVersion: ">=1.29.0-0"

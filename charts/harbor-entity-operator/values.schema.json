@@ -1,0 +1,231 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "labelSelector": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "matchLabels": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "matchExpressions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["key", "operator"],
+            "properties": {
+              "key": { "type": "string", "minLength": 1 },
+              "operator": {
+                "type": "string",
+                "enum": ["In", "NotIn", "Exists", "DoesNotExist"]
+              },
+              "values": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "properties": {
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": { "type": "string" },
+        "tag": { "type": "string" },
+        "digest": { "type": "string" },
+        "pullPolicy": { "type": "string" },
+        "pullSecrets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": { "type": "string" }
+            },
+            "required": ["name"]
+          }
+        }
+      }
+    },
+    "replicaCount": { "type": "integer", "minimum": 1 },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "secure": { "type": "boolean" },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "tls": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "certificateSecret": { "type": "string" }
+          }
+        },
+        "readerRole": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "create": { "type": "boolean" },
+            "binding": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "create": { "type": "boolean" },
+                "serviceAccount": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "name": { "type": "string" },
+                    "namespace": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "serviceMonitor": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "namespace": { "type": "string" },
+            "interval": { "type": "string" },
+            "scrapeTimeout": { "type": "string" },
+            "honorLabels": { "type": "boolean" },
+            "labels": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            },
+            "annotations": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            },
+            "bearerTokenFile": { "type": "string" },
+            "tlsConfig": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "relabelings": {
+              "type": "array",
+              "items": { "type": "object" }
+            },
+            "metricRelabelings": {
+              "type": "array",
+              "items": { "type": "object" }
+            },
+            "endpointAdditionalProperties": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      }
+    },
+    "resources": { "type": "object" },
+    "serviceAccount": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "type": "string" }
+      }
+    },
+    "podAnnotations": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "podLabels": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "priorityClassName": { "type": "string" },
+    "podSecurityContext": { "type": "object" },
+    "containerSecurityContext": { "type": "object" },
+    "env": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "watchNamespaces": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "harborConnection": {
+      "type": "string",
+      "default": "",
+      "description": "Operator-wide ClusterHarborConnection name. When empty, each resource uses spec.harborConnectionRef."
+    },
+    "defaultCreationPolicy": {
+      "type": "string",
+      "enum": ["Create", "Adopt", "CreateOrAdopt"],
+      "default": "Create",
+      "description": "Creation policy used when a resource omits spec.creationPolicy."
+    },
+    "allowCrossNamespaceReferences": {
+      "type": "boolean",
+      "default": true,
+      "description": "Allow namespaced Harbor resources to reference Projects, Registries, Users, UserGroupClaims, and Secrets in other namespaces."
+    },
+    "defaultDriftDetectionInterval": {
+      "type": "string",
+      "default": "0s",
+      "description": "Drift detection interval used when a resource omits spec.driftDetectionInterval. 0s disables periodic drift detection by default."
+    },
+    "harborRequestTimeout": {
+      "type": "string",
+      "default": "30s",
+      "description": "Timeout for each Harbor API request. Must be greater than zero."
+    },
+    "pdb": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "minAvailable": { "type": ["integer", "string", "null"] },
+        "maxUnavailable": { "type": ["integer", "string", "null"] }
+      }
+    },
+    "nodeSelector": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "tolerations": { "type": "array", "items": { "type": "object" } },
+    "affinity": { "type": "object" },
+    "topologySpreadConstraints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "maxSkew": { "type": "integer" },
+          "topologyKey": { "type": "string" },
+          "whenUnsatisfiable": { "type": "string" },
+          "labelSelector": { "type": "object" },
+          "minDomains": { "type": "integer" },
+          "nodeAffinityPolicy": { "type": "string" },
+          "nodeTaintsPolicy": { "type": "string" },
+          "matchLabelKeys": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "required": ["maxSkew", "topologyKey", "whenUnsatisfiable"],
+        "additionalProperties": true
+      }
+    }
+  }
+}

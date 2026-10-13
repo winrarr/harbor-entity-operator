@@ -1,0 +1,96 @@
+/*
+Copyright 2025.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package controller
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	harborv1alpha1 "github.com/winrarr/harbor-entity-operator/api/v1alpha1"
+)
+
+var _ = Describe("HarborConnection Controller", func() {
+	Context("When reconciling a resource", func() {
+		const resourceName = "test-resource"
+
+		ctx := context.Background()
+
+		typeNamespacedName := types.NamespacedName{
+			Name:      resourceName,
+			Namespace: "default",
+		}
+		var server *httptest.Server
+
+		BeforeEach(func() {
+			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/api/v2.0/ping" {
+					w.WriteHeader(http.StatusOK)
+					return
+				}
+				http.NotFound(w, r)
+			}))
+
+			By("creating the custom resource for the Kind HarborConnection")
+			resource := &harborv1alpha1.HarborConnection{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      resourceName,
+					Namespace: "default",
+				},
+				Spec: harborv1alpha1.HarborConnectionSpec{
+					BaseURL: server.URL,
+				},
+			}
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+		})
+
+		AfterEach(func() {
+			server.Close()
+			resource := &harborv1alpha1.HarborConnection{}
+			_ = k8sClient.Get(ctx, typeNamespacedName, resource)
+
+			By("Cleanup the specific resource instance HarborConnection")
+			_ = k8sClient.Delete(ctx, resource)
+		})
+		It("should successfully reconcile the resource", func() {
+			By("Reconciling the created resource")
+			controllerReconciler := &HarborConnectionReconciler{
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+			}
+
+			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+			out := &harborv1alpha1.HarborConnection{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, out)).To(Succeed())
+			Expect(out.Status.Authenticated).To(BeFalse())
+			cond := meta.FindStatusCondition(out.Status.Conditions, ConditionReady)
+			Expect(cond).NotTo(BeNil())
+			Expect(cond.Reason).To(Equal("Reachable"))
+		})
+	})
+})

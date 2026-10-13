@@ -1,0 +1,75 @@
+# Installation
+
+The repository includes a Helm chart at `charts/harbor-entity-operator`. A GHCR install requires a published chart version; use the local Kind stack to build and exercise the current source before a release exists.
+
+## Prerequisites
+
+- a running Harbor instance
+- cluster access with permission to install CRDs, RBAC, and the operator deployment
+- credentials and optional CA material for whichever Harbor instance you want the operator to manage
+
+## Install a published OCI release
+
+```sh
+helm registry login ghcr.io
+helm upgrade --install harbor-entity-operator oci://ghcr.io/winrarr/charts/harbor-entity-operator \
+  --namespace harbor-entity-operator-system \
+  --create-namespace \
+  --version <chart-version>
+```
+
+## Common Overrides
+
+```sh
+helm upgrade --install harbor-entity-operator oci://ghcr.io/winrarr/charts/harbor-entity-operator \
+  --namespace harbor-entity-operator-system \
+  --create-namespace \
+  --version <chart-version> \
+  --set metrics.enabled=true
+```
+
+Useful overrides include:
+
+- metrics enablement
+- ServiceMonitor creation
+- PodDisruptionBudget settings
+- `watchNamespaces` to scope the operator to specific namespaces
+- `harborConnection` to force a single `ClusterHarborConnection` for all Harbor-backed resources
+- `defaultCreationPolicy` to select the creation behavior of resources that omit `spec.creationPolicy` (defaults to `Create`)
+- `allowCrossNamespaceReferences` to control whether namespaced resources may reference Projects, Registries, Users, UserGroupClaims, or Secrets in another namespace (defaults to `true`)
+- `defaultDriftDetectionInterval` to configure periodic reconciliation for resources that omit `spec.driftDetectionInterval` (defaults to `0s`, disabled)
+- `harborRequestTimeout` to bound individual Harbor API requests (defaults to `30s`)
+
+See the chart documentation in [`charts/harbor-entity-operator/README.md`](https://github.com/winrarr/harbor-entity-operator/blob/main/charts/harbor-entity-operator/README.md) for the install flags that matter most.
+
+For a concise explanation of what these settings mean for reconciliation and
+tenant boundaries, see [Operator Configuration](../reference/operator-configuration.md).
+
+## After Installation
+
+The OCI commands assume that the selected version has been published. For local development, use `make kind-up`; it builds the operator and installs Harbor into a disposable Kind cluster.
+
+The operator is only the control plane. You still need to create one of:
+
+- a namespaced `HarborConnection`
+- a cluster-scoped `ClusterHarborConnection`
+
+Then create Harbor-backed resources that reference that connection object.
+If you set `harborConnection` in the chart values, Harbor-backed resources can
+omit `spec.harborConnectionRef` and will all use that cluster-scoped connection.
+
+For shared-cluster setups, see [Multi-Tenancy](../reference/multi-tenancy.md).
+
+## Local Development Stack
+
+If you want a local Harbor plus operator environment for development or testing, use:
+
+```sh
+make kind-up
+```
+
+or:
+
+```sh
+make kind-up KIND_CNI=cilium
+```

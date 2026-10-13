@@ -1,0 +1,27 @@
+apiVersion: harbor.harbor-entity-operator.io/v1alpha1
+kind: Registry
+metadata:
+  labels:
+    app.kubernetes.io/name: harbor-entity-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: registry-sample
+spec:
+  harborConnectionRef:
+    name: harborconnection-sample
+    kind: HarborConnection
+  insecure: false
+  type: github-ghcr
+  url: https://ghcr.io
+  # Optional credentials
+  # credential:
+  #   type: basic
+  #   accessKeySecretRef:
+  #     name: ghcr-credentials
+  #     key: access_key
+  #   accessSecretSecretRef:
+  #     name: ghcr-credentials
+  #     key: access_secret
+  # Optional custom CA certificate
+  # caCertificateRef:
+  #   name: ghcr-ca
+  #   key: ca.crt

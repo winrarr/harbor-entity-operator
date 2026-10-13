@@ -1,0 +1,258 @@
+package controller
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"reflect"
+	"sort"
+	"strings"
+
+	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/runtime"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	harborv1alpha1 "github.com/winrarr/harbor-entity-operator/api/v1alpha1"
+	"github.com/winrarr/harbor-entity-operator/internal/harborclient"
+)
+
+type ReplicationPolicyReconciler struct {
+	client.Client
+	Scheme  *runtime.Scheme
+	Options OperatorOptions
+	logger  logr.Logger
+}
+
+// +kubebuilder:rbac:groups=harbor.harbor-entity-operator.io,resources=replicationpolicies,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=harbor.harbor-entity-operator.io,resources=replicationpolicies/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=harbor.harbor-entity-operator.io,resources=replicationpolicies/finalizers,verbs=update
+// +kubebuilder:rbac:groups=harbor.harbor-entity-operator.io,resources=registries,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch
+// +kubebuilder:rbac:groups=harbor.harbor-entity-operator.io,resources=harborconnections;clusterharborconnections,verbs=get;list;watch
+
+func (r *ReplicationPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	r.logger = log.FromContext(ctx).WithName(fmt.Sprintf("[ReplicationPolicy:%s]", req.NamespacedName))
+
+	var cr harborv1alpha1.ReplicationPolicy
+	if found, err := loadResource(ctx, r.Client, req.NamespacedName, &cr, r.logger); err != nil {
+		return ctrl.Result{}, err
+	} else if !found {
+		return ctrl.Result{}, nil
+	}
+
+	if err := markReconcilingIfNeeded(ctx, r.Client, &cr, &cr.Status.HarborStatusBase, cr.Generation); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	hc, err := getHarborClientForObject(ctx, r.Options, r.Client, &cr, &cr.Status.HarborStatusBase, cr.Namespace, cr.Spec.HarborConnectionRef)
+	if err != nil {
+		if done, finalErr := finalizeWithoutHarborConnection(ctx, r.Client, &cr, cr.Spec.GetDeletionPolicy(), true, err); done {
+			return ctrl.Result{}, finalErr
+		}
+		return ctrl.Result{}, setErrorStatus(ctx, r.Client, &cr, &cr.Status.HarborStatusBase, cr.Generation, err)
+	}
+
+	if done, err := finalizeIfDeleting(ctx, r.Client, &cr, cr.Spec.GetDeletionPolicy(), func() error {
+		if cr.Status.HarborReplicationPolicyID == 0 {
+			return nil
+		}
+		return hc.DeleteReplicationPolicy(ctx, cr.Status.HarborReplicationPolicyID)
+	}); done {
+		return ctrl.Result{}, err
+	}
+
+	if err := ensureFinalizer(ctx, r.Client, &cr); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	srcID, err := resolveRegistryID(ctx, r.Options, r.Client, cr.Namespace, cr.Spec.SourceRegistryRef)
+	if err != nil {
+		return ctrl.Result{}, setErrorStatus(ctx, r.Client, &cr, &cr.Status.HarborStatusBase, cr.Generation, err)
+	}
+	destID, err := resolveRegistryID(ctx, r.Options, r.Client, cr.Namespace, cr.Spec.DestinationRegistryRef)
+	if err != nil {
+		return ctrl.Result{}, setErrorStatus(ctx, r.Client, &cr, &cr.Status.HarborStatusBase, cr.Generation, err)
+	}
+
+	filters, err := replicationFiltersFromSpec(cr.Spec.Filters)
+	if err != nil {
+		return ctrl.Result{}, setErrorStatus(ctx, r.Client, &cr, &cr.Status.HarborStatusBase, cr.Generation, err)
+	}
+	policy := harborclient.ReplicationPolicy{
+		Name:                      cr.Name,
+		Description:               cr.Spec.Description,
+		SrcRegistry:               &harborclient.Registry{ID: srcID},
+		DestRegistry:              &harborclient.Registry{ID: destID},
+		DestNamespace:             cr.Spec.DestNamespace,
+		DestNamespaceReplaceCount: cr.Spec.DestNamespaceReplaceCount,
+		Trigger:                   replicationTriggerFromSpec(cr.Spec.Trigger),
+		Filters:                   filters,
+		ReplicateDeletion:         cr.Spec.ReplicateDeletion,
+		Override:                  cr.Spec.Override,
+		Enabled:                   cr.Spec.Enabled,
+		Speed:                     cr.Spec.Speed,
+		CopyByChunk:               cr.Spec.CopyByChunk,
+		SingleActiveReplication:   cr.Spec.SingleActiveReplication,
+	}
+
+	if cr.Status.HarborReplicationPolicyID == 0 && allowsAdoption(r.Options, cr.Spec.CreationPolicy) {
+		adopted, err := r.adoptExisting(ctx, hc, &cr)
+		if err != nil {
+			return ctrl.Result{}, setErrorStatus(ctx, r.Client, &cr, &cr.Status.HarborStatusBase, cr.Generation, err)
+		}
+		if adopted {
+			r.logger.Info("Adopted existing replication policy", "ID", cr.Status.HarborReplicationPolicyID)
+			return requeueImmediately(), nil
+		}
+	}
+
+	if cr.Status.HarborReplicationPolicyID == 0 {
+		if err := requireCreationAllowed(r.Options, cr.Spec.CreationPolicy); err != nil {
+			return ctrl.Result{}, setErrorStatus(ctx, r.Client, &cr, &cr.Status.HarborStatusBase, cr.Generation, err)
+		}
+		id, err := hc.CreateReplicationPolicy(ctx, policy)
+		if err != nil {
+			return ctrl.Result{}, setErrorStatus(ctx, r.Client, &cr, &cr.Status.HarborStatusBase, cr.Generation, err)
+		}
+		cr.Status.HarborReplicationPolicyID = id
+		if err := setReadyStatus(ctx, r.Client, &cr, &cr.Status.HarborStatusBase, cr.Generation, "Created", "Replication policy created"); err != nil {
+			return ctrl.Result{}, err
+		}
+		return returnWithDriftDetection(r.Options, &cr.Spec.HarborSpecBase)
+	}
+
+	current, err := hc.GetReplicationPolicy(ctx, cr.Status.HarborReplicationPolicyID)
+	if err != nil {
+		if harborclient.IsNotFound(err) {
+			return requeueOnRemoteNotFound(ctx, r.Client, &cr, &cr.Status.HarborStatusBase, cr.Generation, func() {
+				cr.Status.HarborReplicationPolicyID = 0
+			}, "Replication policy not found in Harbor")
+		}
+		return ctrl.Result{}, setErrorStatus(ctx, r.Client, &cr, &cr.Status.HarborStatusBase, cr.Generation, err)
+	}
+
+	if replicationPolicyNeedsUpdate(policy, current) {
+		if err := hc.UpdateReplicationPolicy(ctx, cr.Status.HarborReplicationPolicyID, policy); err != nil {
+			return ctrl.Result{}, setErrorStatus(ctx, r.Client, &cr, &cr.Status.HarborStatusBase, cr.Generation, err)
+		}
+		r.logger.Info("Updated replication policy", "ID", cr.Status.HarborReplicationPolicyID)
+	}
+
+	if err := setReadyStatus(ctx, r.Client, &cr, &cr.Status.HarborStatusBase, cr.Generation, "Reconciled", "Replication policy reconciled"); err != nil {
+		return ctrl.Result{}, err
+	}
+	return returnWithDriftDetection(r.Options, &cr.Spec.HarborSpecBase)
+}
+
+func (r *ReplicationPolicyReconciler) adoptExisting(ctx context.Context, hc *harborclient.Client, cr *harborv1alpha1.ReplicationPolicy) (bool, error) {
+	policies, err := hc.ListReplicationPolicies(ctx, cr.Name)
+	if err != nil {
+		return false, err
+	}
+	for _, p := range policies {
+		if strings.EqualFold(p.Name, cr.Name) {
+			cr.Status.HarborReplicationPolicyID = p.ID
+			return true, r.Status().Update(ctx, cr)
+		}
+	}
+	return false, nil
+}
+
+func (r *ReplicationPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	builder, err := setupHarborBackedController(
+		mgr,
+		r.Options,
+		&harborv1alpha1.ReplicationPolicy{},
+		func() client.ObjectList { return &harborv1alpha1.ReplicationPolicyList{} },
+		func(obj client.Object) *harborv1alpha1.HarborConnectionReference {
+			return obj.(*harborv1alpha1.ReplicationPolicy).Spec.HarborConnectionRef
+		},
+		"replicationpolicy",
+	)
+	if err != nil {
+		return err
+	}
+	return builder.Complete(r)
+}
+
+func replicationTriggerFromSpec(in *harborv1alpha1.ReplicationTriggerSpec) *harborclient.ReplicationTrigger {
+	if in == nil {
+		return nil
+	}
+	trigger := &harborclient.ReplicationTrigger{Type: in.Type}
+	if in.Settings != nil {
+		trigger.TriggerSettings = &harborclient.ReplicationTriggerSettings{Cron: in.Settings.Cron}
+	}
+	return trigger
+}
+
+func replicationFiltersFromSpec(in []harborv1alpha1.ReplicationFilterSpec) ([]harborclient.ReplicationFilter, error) {
+	if len(in) == 0 {
+		return nil, nil
+	}
+	out := make([]harborclient.ReplicationFilter, 0, len(in))
+	for i, f := range in {
+		var value any
+		if len(f.Value.Raw) > 0 {
+			if err := json.Unmarshal(f.Value.Raw, &value); err != nil {
+				return nil, fmt.Errorf("invalid replication filter value at index %d: %w", i, err)
+			}
+		}
+		out = append(out, harborclient.ReplicationFilter{
+			Type:       f.Type,
+			Value:      value,
+			Decoration: f.Decoration,
+		})
+	}
+	return out, nil
+}
+
+func replicationPolicyNeedsUpdate(desired harborclient.ReplicationPolicy, current *harborclient.ReplicationPolicy) bool {
+	if current == nil {
+		return true
+	}
+	nd := normalizeReplicationPolicy(desired)
+	nc := normalizeReplicationPolicy(*current)
+	return !reflect.DeepEqual(nd, nc)
+}
+
+func normalizeReplicationPolicy(in harborclient.ReplicationPolicy) harborclient.ReplicationPolicy {
+	in.ID = 0
+	in.CreationTime = ""
+	in.UpdateTime = ""
+	if in.SrcRegistry != nil {
+		in.SrcRegistry = &harborclient.Registry{ID: in.SrcRegistry.ID}
+	}
+	if in.DestRegistry != nil {
+		in.DestRegistry = &harborclient.Registry{ID: in.DestRegistry.ID}
+	}
+	for i := range in.Filters {
+		in.Filters[i].Value = normalizeAny(in.Filters[i].Value)
+	}
+	sort.SliceStable(in.Filters, func(i, j int) bool {
+		return replicationFilterKey(in.Filters[i]) < replicationFilterKey(in.Filters[j])
+	})
+	return in
+}
+
+func replicationFilterKey(f harborclient.ReplicationFilter) string {
+	b, _ := json.Marshal(normalizeAny(f.Value))
+	return fmt.Sprintf("%s|%s|%s", f.Type, f.Decoration, string(b))
+}
+
+func normalizeAny(in any) any {
+	if in == nil {
+		return nil
+	}
+	b, err := json.Marshal(in)
+	if err != nil {
+		return in
+	}
+	var out any
+	if err := json.Unmarshal(b, &out); err != nil {
+		return in
+	}
+	return out
+}

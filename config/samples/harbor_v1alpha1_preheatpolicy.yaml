@@ -1,0 +1,16 @@
+apiVersion: harbor.harbor-entity-operator.io/v1alpha1
+kind: PreheatPolicy
+metadata:
+  name: all-artifacts
+  namespace: default
+spec:
+  harborConnectionRef:
+    name: clusterharborconnection-sample
+    kind: ClusterHarborConnection
+  projectRef:
+    name: project-sample
+  providerRef: dragonfly-sample
+  filters: '[{"type":"resource","value":"artifact"},{"type":"name","value":"**"}]'
+  trigger: '{"type":"manual","trigger_settings":{}}'
+  extraAttrs: '{}'
+  enabled: false

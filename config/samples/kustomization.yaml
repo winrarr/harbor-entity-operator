@@ -1,5 +1,29 @@
+## Append samples of your project ##
 resources:
-- patterns_v1alpha1_patternconnection.yaml
-- patterns_v1alpha1_patternresource.yaml
-- patterns_v1alpha1_patternresource_member.yaml
-- patterns_v1alpha1_patternmembership.yaml
+  # - harbor-password-secret.yaml
+  - harbor_v1alpha1_registry.yaml
+  - harbor_v1alpha1_project.yaml
+  - harbor_v1alpha1_user.yaml
+  - harbor_v1alpha1_robot.yaml
+  - harbor_v1alpha1_configuration.yaml
+  - harbor_v1alpha1_gcschedule.yaml
+  - harbor_v1alpha1_purgeaudit.yaml
+  - harbor_v1alpha1_retentionpolicy.yaml
+  - harbor_v1alpha1_replicationpolicy.yaml
+  - harbor_v1alpha1_webhookpolicy.yaml
+  - harbor_v1alpha1_immutabletagrule.yaml
+  - harbor_v1alpha1_label.yaml
+  - harbor_v1alpha1_usergroupclaim.yaml
+  - harbor_v1alpha1_harborusergroup.yaml
+  - harbor_v1alpha1_harborrole.yaml
+  - harbor_v1alpha1_harborcveallowlist.yaml
+  - harbor_v1alpha1_preheatinstance.yaml
+  - harbor_v1alpha1_preheatpolicy.yaml
+  - harbor-preheat-auth-secret.yaml
+  - harbor_v1alpha1_scannerregistration.yaml
+  - harbor_v1alpha1_scanallschedule.yaml
+  - harbor_v1alpha1_quota.yaml
+  # - harbor_v1alpha1_member.yaml
+  - harbor_v1alpha1_harborconnection.yaml
+  - harbor_v1alpha1_clusterharborconnection.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

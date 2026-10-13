@@ -19,31 +19,18 @@ DRY_RUN = os.environ.get("DRY_RUN", "false") == "true"
 RELEASE_BRANCH = os.environ.get("RELEASE_BRANCH", "")
 SUPPORTED_RELEASE_BRANCH_COUNT = int(os.environ.get("SUPPORTED_RELEASE_BRANCH_COUNT", "3"))
 
-
-def env_csv(name: str, default: tuple[str, ...]) -> tuple[str, ...]:
-    return tuple(
-        value.strip()
-        for value in os.environ.get(name, ",".join(default)).split(",")
-        if value.strip()
-    )
-
-
-REQUIRED_CHECKS = env_csv("REQUIRED_CHECKS", DEFAULT_REQUIRED_CHECKS)
-AUTO_RELEASE_TRIGGER_PATHS = set(
-    env_csv("AUTO_RELEASE_TRIGGER_PATHS", ("go.mod", "go.sum", "Dockerfile"))
-)
-OPERATOR_RUNTIME_PATHS = env_csv(
-    "OPERATOR_RUNTIME_PATHS",
-    ("go.mod", "go.sum", "Dockerfile", "api", "cmd", "internal"),
-)
-CHART_PATH = os.environ.get("CHART_PATH", "charts/operator-foundry")
-CHART_NAME = os.environ.get("CHART_NAME", Path(CHART_PATH).name)
+REQUIRED_CHECKS = DEFAULT_REQUIRED_CHECKS
+AUTO_RELEASE_TRIGGER_PATHS = {
+    "go.mod",
+    "go.sum",
+    "Dockerfile",
+}
+OPERATOR_RUNTIME_PATHS = ("go.mod", "go.sum", "Dockerfile", "api", "cmd", "internal")
+CHART_PATH = "charts/harbor-entity-operator"
 CHART_YAML_PATH = f"{CHART_PATH}/Chart.yaml"
-CHART_YAML = Path(CHART_YAML_PATH)
-PUBLISH_WORKFLOW = os.environ.get("PUBLISH_WORKFLOW", "publish-release.yml")
+CHART_YAML = Path("charts/harbor-entity-operator/Chart.yaml")
 STABLE_VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 BRANCH_RE = re.compile(r"^release/v?[0-9]+\.[0-9]+$")
-
 
 def log(message: str) -> None:
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -178,7 +165,7 @@ def filter_supported_release_branches(branches: list[str]) -> list[str]:
 
 
 def chart_yaml_value(ref: str, field: str) -> str:
-    content = run_out(["git", "show", f"{ref}:{CHART_YAML_PATH}"])
+    content = run_out(["git", "show", f"{ref}:charts/harbor-entity-operator/Chart.yaml"])
     for line in content.splitlines():
         parts = line.split(None, 1)
         if len(parts) == 2 and parts[0] == f"{field}:":
@@ -225,18 +212,16 @@ def paired_publish_complete(tag: str, chart_version: str) -> bool:
     if not release:
         return False
 
-    expected_asset = f"{CHART_NAME}-{chart_version}.tgz"
+    expected_asset = f"harbor-entity-operator-{chart_version}.tgz"
     return any(asset.get("name") == expected_asset for asset in release.get("assets", []))
 
 
 def dispatch_publish(tag: str) -> None:
     if DRY_RUN:
-        log(f"Would dispatch {PUBLISH_WORKFLOW} for {tag}")
+        log(f"Would dispatch publish-release.yaml for {tag}")
         return
 
-    run(
-        ["gh", "workflow", "run", PUBLISH_WORKFLOW, "--ref", "main", "-f", f"tag_name={tag}"]
-    )
+    run(["gh", "workflow", "run", "publish-release.yaml", "--ref", "main", "-f", f"tag_name={tag}"])
 
 
 def changed_paths(base: str, head: str, pathspecs: tuple[str, ...] = ()) -> list[str]:

@@ -1,0 +1,19 @@
+apiVersion: harbor.harbor-entity-operator.io/v1alpha1
+kind: ReplicationPolicy
+metadata:
+  labels:
+    app.kubernetes.io/name: harbor-entity-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: replicationpolicy-sample
+spec:
+  harborConnectionRef:
+    name: harborconnection-sample
+    kind: HarborConnection
+  sourceRegistryRef:
+    name: registry-sample
+  destinationRegistryRef:
+    name: registry-sample
+  replicateDeletion: false
+  enabled: true
+  trigger:
+    type: manual

@@ -1,0 +1,72 @@
+package v1alpha1
+
+import (
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// UserSpec defines the desired state of User.
+// +kubebuilder:validation:XValidation:rule="size(self.passwordSecretRef.name) > 0",message="passwordSecretRef.name is required"
+type UserSpec struct {
+	HarborSpecBase `json:",inline"`
+
+	// CreationPolicy controls whether the operator creates or adopts the Harbor user.
+	// When omitted, the operator's default creation policy is used.
+	// +kubebuilder:validation:Enum=Create;Adopt;CreateOrAdopt
+	// +optional
+	CreationPolicy CreationPolicy `json:"creationPolicy,omitempty"`
+
+	// Email address of the user.
+	// +kubebuilder:validation:Format=email
+	Email string `json:"email"`
+
+	// Realname is an optional full name. Defaults to metadata.name.
+	// +optional
+	Realname string `json:"realname,omitempty"`
+
+	// Comment is an optional comment for the user.
+	// +optional
+	Comment string `json:"comment,omitempty"`
+
+	// PasswordSecretRef references the required secret key containing the user's password.
+	PasswordSecretRef corev1.SecretKeySelector `json:"passwordSecretRef"`
+}
+
+// UserStatus defines the observed state of User.
+type UserStatus struct {
+	HarborStatusBase `json:",inline"`
+
+	// HarborUserID is the ID of the user in Harbor.
+	HarborUserID int `json:"harborUserID,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:categories=harbor
+// +kubebuilder:printcolumn:name="Username",type=string,JSONPath=`.metadata.name`
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
+// +kubebuilder:printcolumn:name="Reason",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].reason`
+// +kubebuilder:printcolumn:name="Message",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,priority=1
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+
+// User is the Schema for the users API.
+type User struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   UserSpec   `json:"spec,omitempty"`
+	Status UserStatus `json:"status,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+
+// UserList contains a list of User.
+type UserList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []User `json:"items"`
+}
+
+func init() {
+	SchemeBuilder.Register(&User{}, &UserList{})
+}
