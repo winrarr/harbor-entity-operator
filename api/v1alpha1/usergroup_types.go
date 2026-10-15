@@ -7,6 +7,7 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // the global Harbor UserGroup because that would remove memberships belonging
 // to other claims.
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.groupName) || (self.groupName == oldSelf.groupName && self.groupType == oldSelf.groupType && has(self.ldapGroupDN) == has(oldSelf.ldapGroupDN) && (!has(self.ldapGroupDN) || self.ldapGroupDN == oldSelf.ldapGroupDN))",message="group identity fields are immutable"
+// +kubebuilder:validation:XValidation:rule="self.groupType != 1 || size(self.ldapGroupDN) > 0",message="ldapGroupDN is required for LDAP groups"
 type UserGroupClaimSpec struct {
 	HarborClaimSpecBase `json:",inline"`
 

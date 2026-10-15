@@ -26,49 +26,94 @@ type ProjectSpec struct {
 	// +optional
 	Metadata *ProjectMetadata `json:"metadata,omitempty"`
 
-	// CVEAllowlist holds the configuration for the CVE allowlist.
+	// CVEAllowlist configures the project's CVE allowlist. Omit it to leave the
+	// existing allowlist unmanaged; provide an empty items list to clear it.
 	// +optional
-	CVEAllowlist *CVEAllowlist `json:"cve_allowlist,omitempty"`
-
-	// StorageLimit is the storage limit for the project.
-	// +optional
-	StorageLimit int `json:"storage_limit,omitempty"`
+	CVEAllowlist *CVEAllowlist `json:"cveAllowlist,omitempty"`
 
 	// RegistryRef references the Registry to use for proxy cache projects.
 	// +optional
 	RegistryRef *RegistryReference `json:"registryRef,omitempty"`
 }
 
-// ProjectMetadata defines additional metadata for the project.
+// ProjectMetadata defines additional metadata for the project. Nil values leave
+// the corresponding Harbor fields unmanaged. Pointers allow explicit empty
+// values for fields where Harbor uses an empty string to clear a setting.
+// Project visibility is managed through ProjectSpec.Public.
 type ProjectMetadata struct {
-	// Public overrides the visibility derived from ProjectSpec.Public.
-	// When omitted, it defaults to the string form of ProjectSpec.Public.
+	// EnableContentTrust blocks pulling unsigned images when enabled.
+	// +kubebuilder:validation:Enum="true";"false"
 	// +optional
-	Public                   string `json:"public,omitempty"`
-	EnableContentTrust       string `json:"enable_content_trust,omitempty"`
-	EnableContentTrustCosign string `json:"enable_content_trust_cosign,omitempty"`
-	PreventVul               string `json:"prevent_vul,omitempty"`
-	Severity                 string `json:"severity,omitempty"`
-	AutoScan                 string `json:"auto_scan,omitempty"`
-	AutoSBOMGeneration       string `json:"auto_sbom_generation,omitempty"`
-	ReuseSysCVEAllowlist     string `json:"reuse_sys_cve_allowlist,omitempty"`
-	RetentionID              string `json:"retention_id,omitempty"`
-	ProxySpeedKB             string `json:"proxy_speed_kb,omitempty"`
+	EnableContentTrust *string `json:"enable_content_trust,omitempty"`
+	// EnableContentTrustCosign blocks pulling images without a cosign signature when enabled.
+	// +kubebuilder:validation:Enum="true";"false"
+	// +optional
+	EnableContentTrustCosign *string `json:"enable_content_trust_cosign,omitempty"`
+	// PreventVul blocks vulnerable images from running when enabled.
+	// +kubebuilder:validation:Enum="true";"false"
+	// +optional
+	PreventVul *string `json:"prevent_vul,omitempty"`
+	// Severity is the minimum severity threshold for blocking vulnerable images.
+	// +kubebuilder:validation:Enum=none;low;medium;high;critical
+	// +optional
+	Severity *string `json:"severity,omitempty"`
+	// AutoScan scans images automatically when they are pushed.
+	// +kubebuilder:validation:Enum="true";"false"
+	// +optional
+	AutoScan *string `json:"auto_scan,omitempty"`
+	// AutoSBOMGeneration generates SBOMs automatically when subject artifacts are pushed.
+	// +kubebuilder:validation:Enum="true";"false"
+	// +optional
+	AutoSBOMGeneration *string `json:"auto_sbom_generation,omitempty"`
+	// ReuseSysCVEAllowlist makes the project use the system-wide CVE allowlist.
+	// +kubebuilder:validation:Enum="true";"false"
+	// +optional
+	ReuseSysCVEAllowlist *string `json:"reuse_sys_cve_allowlist,omitempty"`
+	// RetentionID is the Harbor ID of the project's tag retention policy.
+	// +optional
+	RetentionID *string `json:"retention_id,omitempty"`
+	// ProxySpeedKB limits proxy-cache bandwidth in kilobits per second.
+	// +optional
+	ProxySpeedKB *string `json:"proxy_speed_kb,omitempty"`
+	// MaxUpstreamConn is the maximum number of upstream connections per artifact.
+	// Use -1 for no limit.
+	// +kubebuilder:validation:Pattern=`^(-1|[0-9]+)$`
+	// +optional
+	MaxUpstreamConn *string `json:"max_upstream_conn,omitempty"`
+	// ProxyCacheLocalOnNotFound serves a cached image when it has been removed upstream.
+	// +kubebuilder:validation:Enum="true";"false"
+	// +optional
+	ProxyCacheLocalOnNotFound *string `json:"proxy_cache_local_on_not_found,omitempty"`
+	// ProxyReferrerAPI enables proxying OCI 1.1 referrer API requests upstream.
+	// +kubebuilder:validation:Enum="true";"false"
+	// +optional
+	ProxyReferrerAPI *string `json:"proxy_referrer_api,omitempty"`
+	// ProxyCacheFilterPattern limits which upstream repositories are proxied.
+	// Set an explicit empty value to allow all repositories.
+	// +optional
+	ProxyCacheFilterPattern *string `json:"proxy_cache_filter_pattern,omitempty"`
+	// ProxyCacheFilterKind selects how ProxyCacheFilterPattern is matched.
+	// +kubebuilder:validation:Enum=doublestar;regex
+	// +optional
+	ProxyCacheFilterKind *string `json:"proxy_cache_filter_kind,omitempty"`
 }
 
 // CVEAllowlistItem defines a single CVE allowlist entry.
 type CVEAllowlistItem struct {
-	CveID string `json:"cve_id"`
+	// CveID is the CVE identifier, such as CVE-2024-12345.
+	// +kubebuilder:validation:MinLength=1
+	CveID string `json:"cveID"`
 }
 
-// CVEAllowlist defines the CVE allowlist configuration.
+// CVEAllowlist defines the writable project CVE allowlist configuration.
 type CVEAllowlist struct {
-	ID           int                `json:"id,omitempty"`
-	ProjectID    int                `json:"project_id,omitempty"`
-	ExpiresAt    int                `json:"expires_at,omitempty"`
-	Items        []CVEAllowlistItem `json:"items,omitempty"`
-	CreationTime metav1.Time        `json:"creation_time,omitempty"`
-	UpdateTime   metav1.Time        `json:"update_time,omitempty"`
+	// ExpiresAt is the optional expiration time as seconds since the Unix epoch.
+	// Omit it for a non-expiring allowlist.
+	// +kubebuilder:validation:Minimum=0
+	// +optional
+	ExpiresAt *int64 `json:"expiresAt,omitempty"`
+	// Items is the complete desired list of CVE identifiers.
+	Items []CVEAllowlistItem `json:"items"`
 }
 
 // ProjectStatus defines the observed state of Project.

@@ -70,7 +70,7 @@ spec:
 - **Dependent resources**
 
   - Updating a `HarborConnection` triggers reconciliation of Harbor-backed CRs that reference it.
-  - Credential and CA material changes are picked up on the next reconciliation.
+  - Credential and CA Secret changes enqueue the connection and its dependent Harbor resources for reconciliation.
     `spec.baseURL` is immutable and must be changed through an explicit
     connection replacement.
 

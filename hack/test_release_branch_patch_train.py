@@ -85,14 +85,17 @@ class PatchTrainRepo:
     def push_branch_and_tags(self) -> None:
         run(["git", "push", "origin", "release/v0.7", "--tags"], self.work)
 
-    def patch_train_output(self) -> str:
+    def patch_train_output(self, extra_env: dict[str, str] | None = None) -> str:
+        env = {
+            "DRY_RUN": "true",
+            "RELEASE_BRANCH": "release/v0.7",
+        }
+        if extra_env:
+            env.update(extra_env)
         return run(
             ["python3", str(SCRIPT)],
             self.work,
-            env={
-                "DRY_RUN": "true",
-                "RELEASE_BRANCH": "release/v0.7",
-            },
+            env=env,
         )
 
 
@@ -102,6 +105,36 @@ class ReleaseBranchPatchTrainTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.repo.cleanup()
+
+    def test_manual_run_skips_unsupported_release_line(self) -> None:
+        for branch in ("release/v0.8", "release/v0.9", "release/v0.10"):
+            run(["git", "branch", branch], self.repo.work)
+            run(["git", "push", "origin", branch], self.repo.work)
+
+        output = self.repo.patch_train_output()
+
+        self.assertIn("release/v0.7: outside the supported maintenance window", output)
+
+    def test_emergency_override_requires_and_records_a_reason(self) -> None:
+        for branch in ("release/v0.8", "release/v0.9", "release/v0.10"):
+            run(["git", "branch", branch], self.repo.work)
+            run(["git", "push", "origin", branch], self.repo.work)
+
+        output = self.repo.patch_train_output({"EMERGENCY_OVERRIDE": "true", "EMERGENCY_REASON": "security update"})
+
+        self.assertIn("Emergency override selected for unsupported line release/v0.7 with a documented reason", output)
+
+    def test_emergency_override_without_reason_fails_closed(self) -> None:
+        result = subprocess.run(
+            ["python3", str(SCRIPT)],
+            cwd=self.repo.work,
+            env={**os.environ, "DRY_RUN": "true", "RELEASE_BRANCH": "release/v0.7", "EMERGENCY_OVERRIDE": "true"},
+            text=True,
+            capture_output=True,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("requires a non-empty EMERGENCY_REASON", result.stdout)
 
     def test_dependency_update_prepares_paired_release(self) -> None:
         with (self.repo.work / "go.sum").open("a") as go_sum:

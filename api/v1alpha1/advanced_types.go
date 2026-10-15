@@ -5,21 +5,26 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // HarborRolePermission describes a permission granted by a custom Harbor role.
 type HarborRolePermission struct {
 	// Kind is the Harbor permission category.
+	// +kubebuilder:validation:MinLength=1
 	Kind string `json:"kind"`
 	// Namespace scopes the permission to a Harbor resource namespace.
 	// +optional
 	Namespace string `json:"namespace,omitempty"`
 	// Access contains the resource/action/effect rules.
+	// +kubebuilder:validation:MinItems=1
 	Access []HarborRoleAccess `json:"access"`
 }
 
 // HarborRoleAccess is one resource/action/effect rule in a custom role.
 type HarborRoleAccess struct {
 	// Resource is the Harbor resource name.
+	// +kubebuilder:validation:MinLength=1
 	Resource string `json:"resource"`
 	// Action is the Harbor action name, such as pull, push, read, or delete.
+	// +kubebuilder:validation:MinLength=1
 	Action string `json:"action"`
 	// Effect is the permission effect.
+	// +kubebuilder:validation:MinLength=1
 	Effect string `json:"effect"`
 }
 
@@ -36,6 +41,7 @@ type HarborRoleSpec struct {
 	// +optional
 	Description string `json:"description,omitempty"`
 	// Permissions lists the role's Harbor API permission rules.
+	// +kubebuilder:validation:MinItems=1
 	Permissions []HarborRolePermission `json:"permissions"`
 }
 
@@ -51,6 +57,8 @@ type HarborRoleStatus struct {
 // +kubebuilder:resource:scope=Cluster,categories=harbor
 // +kubebuilder:printcolumn:name="HarborID",type=integer,JSONPath=`.status.harborRoleID`
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
+// +kubebuilder:printcolumn:name="Reason",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].reason`
+// +kubebuilder:printcolumn:name="Message",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,priority=1
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // HarborRole manages a custom Harbor system role. Built-in roles cannot be managed.
 type HarborRole struct {
@@ -99,6 +107,8 @@ type HarborUserGroupStatus struct {
 // +kubebuilder:resource:scope=Cluster,categories=harbor
 // +kubebuilder:printcolumn:name="HarborID",type=integer,JSONPath=`.status.harborUserGroupID`
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
+// +kubebuilder:printcolumn:name="Reason",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].reason`
+// +kubebuilder:printcolumn:name="Message",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,priority=1
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // HarborUserGroup manages a Harbor-global user group.
 type HarborUserGroup struct {
@@ -124,6 +134,7 @@ type HarborCVEAllowlistItem struct {
 
 // HarborCVEAllowlistSpec defines Harbor's system-wide CVE allowlist.
 // +kubebuilder:validation:XValidation:rule="!has(self.harborConnectionRef) || self.harborConnectionRef.kind == 'ClusterHarborConnection'",message="cluster-scoped HarborCVEAllowlist requires a ClusterHarborConnection reference"
+// +kubebuilder:validation:XValidation:rule="!has(self.driftDetectionInterval) || !self.driftDetectionInterval.startsWith('-')",message="driftDetectionInterval must not be negative"
 type HarborCVEAllowlistSpec struct {
 	// HarborConnectionRef references the Harbor instance to configure.
 	// +optional
@@ -171,6 +182,8 @@ type HarborCVEAllowlistStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster,categories=harbor
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
+// +kubebuilder:printcolumn:name="Reason",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].reason`
+// +kubebuilder:printcolumn:name="Message",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,priority=1
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // HarborCVEAllowlist owns Harbor's system-wide CVE allowlist singleton.
 type HarborCVEAllowlist struct {
@@ -190,6 +203,7 @@ type HarborCVEAllowlistList struct {
 // PreheatInstanceSpec defines a Harbor-global P2P preheat provider instance.
 // +kubebuilder:validation:XValidation:rule="!has(self.harborConnectionRef) || self.harborConnectionRef.kind == 'ClusterHarborConnection'",message="cluster-scoped PreheatInstance requires a ClusterHarborConnection reference"
 // +kubebuilder:validation:XValidation:rule="self.authMode == 'NONE' || has(self.authInfoSecretRef)",message="authInfoSecretRef is required when authMode is not NONE"
+// +kubebuilder:validation:XValidation:rule="!has(self.authInfoSecretRef) || size(self.authInfoSecretRef.namespace) > 0",message="authInfoSecretRef.namespace is required for a cluster-scoped PreheatInstance"
 type PreheatInstanceSpec struct {
 	HarborSpecBase `json:",inline"`
 
@@ -204,7 +218,9 @@ type PreheatInstanceSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	Vendor string `json:"vendor"`
 	// Endpoint is the provider service endpoint.
-	// +kubebuilder:validation:Format=url
+	// It must be an absolute HTTP or HTTPS URL without query or fragment components.
+	// +kubebuilder:validation:Format=uri
+	// +kubebuilder:validation:Pattern=`^https?://[^/?#]+(/[^?#]*)?$`
 	Endpoint string `json:"endpoint"`
 	// AuthMode is the authentication mode understood by the selected provider.
 	// +kubebuilder:default=NONE
@@ -243,6 +259,8 @@ type PreheatInstanceStatus struct {
 // +kubebuilder:printcolumn:name="Vendor",type=string,JSONPath=`.spec.vendor`
 // +kubebuilder:printcolumn:name="HarborID",type=integer,JSONPath=`.status.harborInstanceID`
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
+// +kubebuilder:printcolumn:name="Reason",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].reason`
+// +kubebuilder:printcolumn:name="Message",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,priority=1
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // PreheatInstance manages a Harbor-global preheat provider instance.
 type PreheatInstance struct {
@@ -270,7 +288,7 @@ type PreheatPolicySpec struct {
 	// ProjectRef identifies the Harbor Project resource this policy belongs to.
 	ProjectRef ProjectReference `json:"projectRef"`
 	// ProviderRef identifies the cluster-scoped PreheatInstance used by this policy.
-	ProviderRef string `json:"providerRef"`
+	ProviderRef PreheatInstanceReference `json:"providerRef"`
 	// Description describes the policy.
 	// +optional
 	Description string `json:"description,omitempty"`
@@ -301,6 +319,8 @@ type PreheatPolicyStatus struct {
 // +kubebuilder:resource:categories=harbor
 // +kubebuilder:printcolumn:name="Project",type=string,JSONPath=`.spec.projectRef.name`
 // +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`
+// +kubebuilder:printcolumn:name="Reason",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].reason`
+// +kubebuilder:printcolumn:name="Message",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,priority=1
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // PreheatPolicy manages a Harbor project preheat policy.
 type PreheatPolicy struct {

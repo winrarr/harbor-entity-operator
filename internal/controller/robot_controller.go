@@ -26,7 +26,10 @@ import (
 	"github.com/winrarr/harbor-entity-operator/internal/harborclient"
 )
 
-const robotUsernameSecretKey = "username"
+const (
+	robotUsernameSecretKey            = "username"
+	harborPersistedRobotNameMaxLength = 255
+)
 
 type RobotReconciler struct {
 	client.Client
@@ -109,8 +112,8 @@ func (r *RobotReconciler) createRobot(
 	ctx context.Context,
 	hc *harborclient.Client,
 	cr *harborv1alpha1.Robot,
-	secretRef *harborv1alpha1.SecretReference,
-	imagePullSecretRef *harborv1alpha1.SecretObjectReference,
+	secretRef *harborv1alpha1.SecretOutputReference,
+	imagePullSecretRef *harborv1alpha1.SecretOutputReference,
 ) (ctrl.Result, error) {
 	createReq, err := r.buildRobotCreateRequest(ctx, cr)
 	if err != nil {
@@ -151,8 +154,8 @@ func (r *RobotReconciler) reconcileExisting(
 	ctx context.Context,
 	hc *harborclient.Client,
 	cr *harborv1alpha1.Robot,
-	secretRef *harborv1alpha1.SecretReference,
-	imagePullSecretRef *harborv1alpha1.SecretObjectReference,
+	secretRef *harborv1alpha1.SecretOutputReference,
+	imagePullSecretRef *harborv1alpha1.SecretOutputReference,
 ) (ctrl.Result, error) {
 	current, err := hc.GetRobotByID(ctx, cr.Status.HarborRobotID)
 	if err != nil {
@@ -210,7 +213,7 @@ func (r *RobotReconciler) reconcileExisting(
 		r.logger.Info("Rotated robot secret", "ID", current.ID)
 	} else if imagePullSecretRef != nil {
 		if secretRef != nil {
-			imagePullToken, err = readSecretValue(ctx, r.Options, r.Client, *secretRef, cr.Namespace, "secret")
+			imagePullToken, err = readSecretValue(ctx, r.Options, r.Client, harborv1alpha1.SecretReference{Name: secretRef.Name, Namespace: secretRef.Namespace, Key: secretRef.Key}, cr.Namespace, "secret")
 		} else {
 			imagePullToken, err = r.readImagePullSecretToken(ctx, hc, cr, imagePullSecretRef)
 		}
@@ -235,17 +238,17 @@ func (r *RobotReconciler) reconcileExisting(
 	return returnWithDriftDetection(r.Options, &cr.Spec.HarborSpecBase)
 }
 
-func upsertRobotSecret(ctx context.Context, c client.Client, cr *harborv1alpha1.Robot, ref *harborv1alpha1.SecretReference, username, token string) error {
+func upsertRobotSecret(ctx context.Context, c client.Client, cr *harborv1alpha1.Robot, ref *harborv1alpha1.SecretOutputReference, username, token string) error {
 	if ref == nil {
 		return nil
 	}
 	if username == "" {
 		return fmt.Errorf("harbor returned an empty robot username")
 	}
-	return upsertOwnedSecretValues(ctx, c, cr, "Robot", ref.Namespace, ref.Name, map[string]string{
+	return upsertOwnedRobotSecretWithMetadata(ctx, c, cr, ref.Namespace, ref.Name, corev1.SecretTypeOpaque, map[string]string{
 		ref.Key:                token,
 		robotUsernameSecretKey: username,
-	})
+	}, ref.Labels, ref.Annotations)
 }
 
 type dockerConfig struct {
@@ -262,7 +265,7 @@ func (r *RobotReconciler) reconcileImagePullSecret(
 	ctx context.Context,
 	hc *harborclient.Client,
 	cr *harborv1alpha1.Robot,
-	ref *harborv1alpha1.SecretObjectReference,
+	ref *harborv1alpha1.SecretOutputReference,
 	token string,
 ) error {
 	if ref == nil {
@@ -298,16 +301,16 @@ func (r *RobotReconciler) reconcileImagePullSecret(
 		return fmt.Errorf("marshal image pull Secret: %w", err)
 	}
 
-	return upsertOwnedSecret(ctx, r.Client, cr, "Robot", namespace, ref.Name, corev1.SecretTypeDockerConfigJson, map[string]string{
+	return upsertOwnedRobotSecretWithMetadata(ctx, r.Client, cr, namespace, ref.Name, corev1.SecretTypeDockerConfigJson, map[string]string{
 		corev1.DockerConfigJsonKey: string(config),
-	})
+	}, ref.Labels, ref.Annotations)
 }
 
 func (r *RobotReconciler) readImagePullSecretToken(
 	ctx context.Context,
 	hc *harborclient.Client,
 	cr *harborv1alpha1.Robot,
-	ref *harborv1alpha1.SecretObjectReference,
+	ref *harborv1alpha1.SecretOutputReference,
 ) (string, error) {
 	namespace := ref.Namespace
 	if namespace == "" {
@@ -325,7 +328,7 @@ func (r *RobotReconciler) readImagePullSecretToken(
 	if err := reader.Get(ctx, types.NamespacedName{Namespace: namespace, Name: ref.Name}, &secret); err != nil {
 		return "", err
 	}
-	if !secretOwnedBy(&secret, cr, "Robot") {
+	if !robotSecretOwnedBy(&secret, cr) {
 		return "", fmt.Errorf("secret %s/%s already exists and is not managed by Robot %s/%s", namespace, ref.Name, cr.Namespace, cr.Name)
 	}
 	if secret.Type != corev1.SecretTypeDockerConfigJson {
@@ -362,7 +365,7 @@ func harborRegistryHost(baseURL string) (string, error) {
 	return parsed.Host, nil
 }
 
-func syncRobotUsernameSecret(ctx context.Context, c client.Client, cr *harborv1alpha1.Robot, ref *harborv1alpha1.SecretReference, username string) error {
+func syncRobotUsernameSecret(ctx context.Context, c client.Client, cr *harborv1alpha1.Robot, ref *harborv1alpha1.SecretOutputReference, username string) error {
 	if ref == nil {
 		return nil
 	}
@@ -374,10 +377,10 @@ func syncRobotUsernameSecret(ctx context.Context, c client.Client, cr *harborv1a
 	if err != nil {
 		return err
 	}
-	if !secretOwnedBy(&secret, cr, "Robot") {
+	if !robotSecretOwnedBy(&secret, cr) {
 		return fmt.Errorf("secret %s/%s already exists and is not managed by Robot %s/%s", ref.Namespace, ref.Name, cr.Namespace, cr.Name)
 	}
-	return upsertOwnedSecretValues(ctx, c, cr, "Robot", ref.Namespace, ref.Name, map[string]string{robotUsernameSecretKey: username})
+	return upsertOwnedRobotSecretWithMetadata(ctx, c, cr, ref.Namespace, ref.Name, corev1.SecretTypeOpaque, map[string]string{robotUsernameSecretKey: username}, ref.Labels, ref.Annotations)
 }
 
 func setRobotUsernameStatus(cr *harborv1alpha1.Robot, username string) bool {
@@ -434,10 +437,19 @@ func validateRobotSpec(cr *harborv1alpha1.Robot) error {
 	if cr.Spec.SecretRef == nil && cr.Spec.ImagePullSecretRef == nil {
 		return fmt.Errorf("at least one of spec.secretRef or spec.imagePullSecretRef must be set")
 	}
+	if cr.Spec.ImagePullSecretRef != nil && cr.Spec.ImagePullSecretRef.Key != "" {
+		return fmt.Errorf("spec.imagePullSecretRef.key is not supported because image-pull Secrets have a fixed data shape")
+	}
+	if err := validateSecretOutputMetadata(cr.Spec.SecretRef, "spec.secretRef"); err != nil {
+		return err
+	}
+	if err := validateSecretOutputMetadata(cr.Spec.ImagePullSecretRef, "spec.imagePullSecretRef"); err != nil {
+		return err
+	}
 	return nil
 }
 
-func resolveRobotSecretRef(cr *harborv1alpha1.Robot) (*harborv1alpha1.SecretReference, error) {
+func resolveRobotSecretRef(cr *harborv1alpha1.Robot) (*harborv1alpha1.SecretOutputReference, error) {
 	if cr.Spec.SecretRef == nil {
 		return nil, nil
 	}
@@ -457,7 +469,7 @@ func resolveRobotSecretRef(cr *harborv1alpha1.Robot) (*harborv1alpha1.SecretRefe
 	return &ref, nil
 }
 
-func resolveImagePullSecretRef(cr *harborv1alpha1.Robot, robotSecretRef *harborv1alpha1.SecretReference) (*harborv1alpha1.SecretObjectReference, error) {
+func resolveImagePullSecretRef(cr *harborv1alpha1.Robot, robotSecretRef *harborv1alpha1.SecretOutputReference) (*harborv1alpha1.SecretOutputReference, error) {
 	if cr.Spec.ImagePullSecretRef == nil {
 		return nil, nil
 	}
@@ -479,6 +491,16 @@ func (r *RobotReconciler) buildRobotCreateRequest(ctx context.Context, cr *harbo
 	if err != nil {
 		return harborclient.RobotCreateRequest{}, err
 	}
+	if strings.EqualFold(cr.Spec.Level, "project") {
+		for _, permission := range permissions {
+			if strings.EqualFold(permission.Kind, "project") && permission.Namespace != "*" {
+				if err := validateProjectScopedRobotName(permission.Namespace, cr.Name); err != nil {
+					return harborclient.RobotCreateRequest{}, err
+				}
+				break
+			}
+		}
+	}
 	return harborclient.RobotCreateRequest{
 		Name:        cr.Name,
 		Description: cr.Spec.Description,
@@ -488,6 +510,20 @@ func (r *RobotReconciler) buildRobotCreateRequest(ctx context.Context, cr *harbo
 		Duration:    &cr.Spec.Duration,
 		Permissions: permissions,
 	}, nil
+}
+
+func validateProjectScopedRobotName(projectName, robotName string) error {
+	effectiveLength := len(projectName) + 1 + len(robotName)
+	if effectiveLength <= harborPersistedRobotNameMaxLength {
+		return nil
+	}
+	return fmt.Errorf(
+		"project-scoped Robot name exceeds Harbor's persisted robot-name limit: project %q plus requested Robot name %q and separator has length %d; maximum is %d",
+		projectName,
+		robotName,
+		effectiveLength,
+		harborPersistedRobotNameMaxLength,
+	)
 }
 
 func (r *RobotReconciler) buildRobotUpdateRequest(ctx context.Context, cr *harborv1alpha1.Robot, current *harborclient.Robot) (harborclient.Robot, error) {
@@ -696,6 +732,20 @@ func (r *RobotReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err != nil {
 		return err
 	}
+	builder = watchSecretReferences(builder, r.Client,
+		func() client.ObjectList { return &harborv1alpha1.RobotList{} },
+		func(obj client.Object) []harborv1alpha1.SecretReference {
+			robot := obj.(*harborv1alpha1.Robot)
+			references := make([]harborv1alpha1.SecretReference, 0, 2)
+			if ref := robot.Spec.SecretRef; ref != nil {
+				references = append(references, harborv1alpha1.SecretReference{Name: ref.Name, Namespace: ref.Namespace, Key: ref.Key})
+			}
+			if ref := robot.Spec.ImagePullSecretRef; ref != nil {
+				references = append(references, harborv1alpha1.SecretReference{Name: ref.Name, Namespace: ref.Namespace})
+			}
+			return references
+		},
+	)
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &harborv1alpha1.Robot{}, robotProjectRefIndex, func(raw client.Object) []string {
 		robot := raw.(*harborv1alpha1.Robot)
 		keys := make([]string, 0, len(robot.Spec.Permissions))

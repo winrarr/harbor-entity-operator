@@ -20,6 +20,13 @@ spec:
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: Ready
       type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].reason
+      name: Reason
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].message
+      name: Message
+      priority: 1
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -79,6 +86,9 @@ spec:
                     type: string
                   name:
                     description: Name of the referenced Harbor connection object.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                     type: string
                 required:
                 - name
@@ -107,6 +117,8 @@ spec:
                 reference
               rule: '!has(self.harborConnectionRef) || self.harborConnectionRef.kind
                 == ''ClusterHarborConnection'''
+            - message: driftDetectionInterval must not be negative
+              rule: '!has(self.driftDetectionInterval) || !self.driftDetectionInterval.startsWith(''-'')'
           status:
             description: HarborCVEAllowlistStatus records the last observed Harbor
               update time.

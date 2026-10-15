@@ -9,12 +9,31 @@ the release metadata for both artifacts:
 The versions are allowed to differ. For example, a release can publish
 operator `0.7.1` in chart version `0.5.1`.
 
+## Maintenance support window
+
+The newest three existing numeric release branches are supported. Each
+`release/v0.X` minor is one line before `1.0`; after `1.0`, each
+`release/vMAJOR.MINOR` pair is one line. The policy sorts numeric version
+components and counts actual release branches, so `0.10` follows `0.9` and a
+missing branch does not consume a slot.
+
+The pull-request test check blocks routine changes targeting an unsupported
+release branch. The dependency patch train skips unsupported lines, and
+release publishers reject their versions. For an emergency or security fix, a
+maintainer must review the change and either apply the
+`release-emergency-approved` pull-request label or manually dispatch the
+relevant workflow with `emergency_override` and a short, non-sensitive reason.
+Configure the GitHub `release-emergency` environment with required reviewers;
+routine workflow runs use the unprotected `release-routine` environment.
+Renovate may still propose an update against an old line, but its required test
+check will fail until a maintainer approves the exception.
+
 ## Release tags
 
 Release tags are the publication interface:
 
 - `vX.Y.Z` or `vX.Y.Z-rc.N` publishes the operator image and a matching chart.
-- `chart-vX.Y.Z` or `chart-vX.Y.Z-rc.N` publishes a chart-only release.
+- `chart-vX.Y.Z` identifies a stable chart-only release.
 
 The publisher packages the chart from the same tagged commit as the image and
 attaches the chart package to the GitHub Release for `v*` tags. Do not create a
@@ -23,9 +42,9 @@ separate `chart-v*` tag for the same paired operator release.
 For `chart-v*` tags, the publisher verifies that the image selected by
 `appVersion` already exists before publishing the chart.
 
-The publisher also supports manual dispatch with an existing tag name for
-recovery. Re-run or dispatch the workflow for the existing tag; do not move or
-recreate a release tag.
+The paired operator publisher also supports manual dispatch with an existing
+`v*` tag for recovery. Chart-only releases use the dedicated workflow below.
+Never move or recreate an existing release tag.
 
 ## Create a release branch
 
@@ -80,17 +99,20 @@ matching release-candidate metadata.
 
 ## Chart-only release
 
-For a chart-only change, update the chart templates or values and increment
-only `Chart.yaml.version`. Keep `appVersion` set to the existing operator
-image version. After the required checks pass, create the chart tag:
+For a chart-only change, update the chart templates or values on `main` (or an
+approved release branch) and keep `appVersion` set to the intended stable
+operator image version. After required checks pass, run the **Publish
+Chart-only Release** workflow and select the source branch and a new stable
+chart version. The workflow checks the source commit, required checks, support
+window, stable image, and immutable `chart-vX.Y.Z` tag before publishing. It
+attests the published OCI chart digest and attaches the chart archive to a
+matching GitHub Release.
 
-```sh
-git tag -a chart-v0.5.2 -m "Chart release chart-v0.5.2"
-git push origin chart-v0.5.2
-```
-
-The publisher verifies that the image selected by `appVersion` exists and
-publishes the chart version from `Chart.yaml`.
+Use the same source branch and chart version to recover a failed run. The
+workflow verifies any existing OCI package, tag, or release asset before
+resuming; it never moves a tag or replaces different chart content. A dry run
+performs source, version, check, image, and packaging validation without
+publishing or creating a tag.
 
 ## Dependency-only patch train
 

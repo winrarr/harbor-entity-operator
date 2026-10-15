@@ -30,6 +30,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"net/url"
 	"os"
 	"os/exec"
 	"strconv"
@@ -59,6 +60,7 @@ const metricsCAConfigMapName = "harbor-entity-operator-metrics-ca"
 
 var _ = Describe("Manager", Ordered, func() {
 	var controllerPodName string
+	var chaosCleanup func() error
 
 	// Before running the tests, set up the environment by creating the namespace,
 	// enforce the restricted security policy to the namespace, installing CRDs,
@@ -112,9 +114,14 @@ var _ = Describe("Manager", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred(), "Failed to enable metrics on the controller-manager deployment")
 	})
 
-	// After all tests have been executed, clean up by undeploying the controller, uninstalling CRDs,
-	// and deleting the namespace.
+	// After all tests have been executed, remove the controller and test namespace.
+	// Leave the cluster-scoped CRDs installed so existing custom resources survive.
 	AfterAll(func() {
+		By("cleaning up Harbor resources before stopping their controllers")
+		if err := deleteNamespacedHarborResources(namespace); err != nil {
+			Fail(fmt.Sprintf("Failed to clean up Harbor resources: %v", err))
+		}
+
 		By("cleaning up the curl pod for metrics")
 		cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
 		_, _ = utils.Run(cmd)
@@ -125,12 +132,8 @@ var _ = Describe("Manager", Ordered, func() {
 		cmd = exec.Command("make", "undeploy")
 		_, _ = utils.Run(cmd)
 
-		By("uninstalling CRDs")
-		cmd = exec.Command("make", "uninstall")
-		_, _ = utils.Run(cmd)
-
 		By("removing manager namespace")
-		cmd = exec.Command("kubectl", "delete", "ns", namespace)
+		cmd = exec.Command("kubectl", "delete", "ns", namespace, "--wait=true", "--timeout=2m")
 		_, _ = utils.Run(cmd)
 	})
 
@@ -178,6 +181,15 @@ var _ = Describe("Manager", Ordered, func() {
 				} else {
 					fmt.Println("Failed to describe controller pod")
 				}
+			}
+		}
+
+		if chaosCleanup != nil {
+			By("restoring the Harbor chaos-test dependencies and deleting its resources")
+			if err := chaosCleanup(); err != nil {
+				_, _ = fmt.Fprintf(GinkgoWriter, "Failed to clean up chaos-test resources: %v\n", err)
+			} else {
+				chaosCleanup = nil
 			}
 		}
 	})
@@ -349,7 +361,7 @@ metadata:
   namespace: %s
 type: Opaque
 stringData:
-  password: "%s"
+  password: %q
 ---
 apiVersion: harbor.harbor-entity-operator.io/v1alpha1
 kind: HarborConnection
@@ -388,8 +400,6 @@ spec:
     name: %s
     kind: HarborConnection
   public: true
-  metadata:
-    public: "true"
   registryRef:
     name: %s
 ---
@@ -642,119 +652,6 @@ spec:
 				_, _ = utils.Run(cmd)
 			})
 
-			It("should report a conflict for singleton resources targeting the same Harbor instance", func() {
-				baseURL := os.Getenv("HARBOR_BASE_URL")
-				inClusterBaseURL := os.Getenv("HARBOR_IN_CLUSTER_BASE_URL")
-				adminUser := os.Getenv("HARBOR_ADMIN_USER")
-				adminPass := os.Getenv("HARBOR_ADMIN_PASSWORD")
-				if baseURL == "" || adminUser == "" || adminPass == "" {
-					Skip("HARBOR_BASE_URL, HARBOR_ADMIN_USER, and HARBOR_ADMIN_PASSWORD must be set to run Harbor flow")
-				}
-				if inClusterBaseURL == "" {
-					inClusterBaseURL = baseURL
-				}
-
-				suffix := fmt.Sprintf("%d", time.Now().UnixNano())
-				secretName := "harbor-e2e-singleton-pass-" + suffix
-				connA := "harbor-e2e-singleton-conn-a-" + suffix
-				connB := "harbor-e2e-singleton-conn-b-" + suffix
-				cfgA := "e2e-config-a-" + suffix
-				cfgB := "e2e-config-b-" + suffix
-
-				crs := fmt.Sprintf(`---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: %s
-  namespace: %s
-type: Opaque
-stringData:
-  password: "%s"
----
-apiVersion: harbor.harbor-entity-operator.io/v1alpha1
-kind: HarborConnection
-metadata:
-  name: %s
-  namespace: %s
-spec:
-  baseURL: %s
-  credentials:
-    type: basic
-    username: %s
-    passwordSecretRef:
-      name: %s
-      key: password
----
-apiVersion: harbor.harbor-entity-operator.io/v1alpha1
-kind: HarborConnection
-metadata:
-  name: %s
-  namespace: %s
-spec:
-  baseURL: %s
-  credentials:
-    type: basic
-    username: %s
-    passwordSecretRef:
-      name: %s
-      key: password
----
-apiVersion: harbor.harbor-entity-operator.io/v1alpha1
-kind: Configuration
-metadata:
-  name: %s
-  namespace: %s
-spec:
-  harborConnectionRef:
-    name: %s
-    kind: HarborConnection
-  settings:
-    robot_token_duration:
-      value: 44
----
-apiVersion: harbor.harbor-entity-operator.io/v1alpha1
-kind: Configuration
-metadata:
-  name: %s
-  namespace: %s
-spec:
-  harborConnectionRef:
-    name: %s
-    kind: HarborConnection
-  settings:
-    robot_token_duration:
-      value: 66
-`, secretName, namespace, adminPass,
-					connA, namespace, inClusterBaseURL, adminUser, secretName,
-					connB, namespace, inClusterBaseURL, adminUser, secretName,
-					cfgA, namespace, connA,
-					cfgB, namespace, connB)
-
-				applyFile := writeTempFile(crs)
-				DeferCleanup(func() {
-					_ = os.Remove(applyFile)
-				})
-
-				cmd := exec.Command("kubectl", "apply", "-f", applyFile)
-				_, err := utils.Run(cmd)
-				Expect(err).NotTo(HaveOccurred())
-
-				waitReady("harborconnection", connA)
-				waitReady("harborconnection", connB)
-				waitReady("configuration", cfgA)
-				waitConditionReason("configuration", cfgB, "Ready", "ReconcileError")
-
-				message := getConditionMessage("configuration", cfgB, "Ready")
-				Expect(message).To(ContainSubstring("conflicts with existing owner"))
-
-				deleteCR("configuration", cfgB)
-				deleteCR("configuration", cfgA)
-				deleteCR("harborconnection", connB)
-				deleteCR("harborconnection", connA)
-				cmd = exec.Command("kubectl", "delete", "secret", secretName, "-n", namespace, "--wait=true")
-				_, _ = utils.Run(cmd)
-			})
-
 			It("should reconcile user groups, CVE allowlists, and preheat resources", func() {
 				baseURL := os.Getenv("HARBOR_BASE_URL")
 				inClusterBaseURL := os.Getenv("HARBOR_IN_CLUSTER_BASE_URL")
@@ -883,7 +780,8 @@ spec:
     kind: ClusterHarborConnection
   projectRef:
     name: %s
-  providerRef: %s
+  providerRef:
+    name: %s
   filters: '[{"type":"resource","value":"artifact"},{"type":"name","value":"**"}]'
   trigger: '{"type":"manual","trigger_settings":{}}'
   extraAttrs: '{}'
@@ -936,10 +834,6 @@ spec:
 				_, statusCode = harborAPIRequest(baseURL, adminUser, adminPass, "GET", "/api/v2.0/system/CVEAllowlist", "")
 				Expect(statusCode).To(Equal(200))
 				Expect(harborHasObject(baseURL, adminUser, adminPass, "/api/v2.0/system/CVEAllowlist", `"cve_id":"`+cveBeforeDrift+`"`)).To(BeTrue())
-				cmd = exec.Command("kubectl", "patch", "harborusergroup.harbor.harbor-entity-operator.io/"+groupName, "--type=merge", "-p", `{"spec":{"groupType":3}}`)
-				_, err = utils.Run(cmd)
-				Expect(err).To(HaveOccurred(), "HarborUserGroup should reject changes to groupType")
-				Expect(harborHasObject(baseURL, adminUser, adminPass, "/api/v2.0/usergroups/"+groupID, `"group_type":2`)).To(BeTrue())
 
 				cmd = exec.Command("kubectl", "patch", "harborcveallowlist.harbor.harbor-entity-operator.io/"+allowlistName, "--type=merge", "-p", `{"spec":{"items":[{"cveID":"`+cveAfterDrift+`"}]}}`)
 				_, err = utils.Run(cmd)
@@ -1071,7 +965,7 @@ spec:
 				Expect(harborHasObject(baseURL, adminUser, adminPass, "/api/v2.0/roles/"+roleID, `"name":"`+roleName+`"`)).To(BeTrue())
 			})
 
-			It("should reject changes to a bound HarborConnection", func() {
+			It("should recover from remote deletion, missing credentials, and a Harbor outage", func() {
 				baseURL := os.Getenv("HARBOR_BASE_URL")
 				inClusterBaseURL := os.Getenv("HARBOR_IN_CLUSTER_BASE_URL")
 				adminUser := os.Getenv("HARBOR_ADMIN_USER")
@@ -1084,11 +978,10 @@ spec:
 				}
 
 				suffix := fmt.Sprintf("%d", time.Now().UnixNano())
-				secretName := "harbor-e2e-connwatch-pass-" + suffix
-				connName := "harbor-e2e-connwatch-conn-" + suffix
-				projectName := "e2e-connwatch-project-" + suffix
-
-				crs := fmt.Sprintf(`---
+				secretName := "harbor-e2e-chaos-pass-" + suffix
+				connectionName := "harbor-e2e-chaos-conn-" + suffix
+				projectName := "e2e-chaos-project-" + suffix
+				manifest := fmt.Sprintf(`---
 apiVersion: v1
 kind: Secret
 metadata:
@@ -1096,7 +989,7 @@ metadata:
   namespace: %s
 type: Opaque
 stringData:
-  password: "%s"
+  password: %q
 ---
 apiVersion: harbor.harbor-entity-operator.io/v1alpha1
 kind: HarborConnection
@@ -1120,30 +1013,127 @@ metadata:
 spec:
   harborConnectionRef:
     name: %s
-    kind: HarborConnection
   public: false
-`, secretName, namespace, adminPass, connName, namespace, inClusterBaseURL, adminUser, secretName, projectName, namespace, connName)
+  driftDetectionInterval: 10s
+`, secretName, namespace, adminPass,
+					connectionName, namespace, inClusterBaseURL, adminUser, secretName,
+					projectName, namespace, connectionName)
 
-				applyFile := writeTempFile(crs)
+				coreDeployment := os.Getenv("HARBOR_CORE_DEPLOYMENT")
+				coreNamespace := os.Getenv("HARBOR_CORE_NAMESPACE")
+				if coreNamespace == "" {
+					coreNamespace = "default"
+				}
+				coreReplicas := 0
+				if coreDeployment != "" {
+					output, scaleErr := utils.Run(exec.Command("kubectl", "get", "deployment", coreDeployment, "-n", coreNamespace, "-o", "jsonpath={.spec.replicas}"))
+					Expect(scaleErr).NotTo(HaveOccurred())
+					parsedReplicas, parseErr := strconv.Atoi(strings.TrimSpace(output))
+					Expect(parseErr).NotTo(HaveOccurred())
+					coreReplicas = parsedReplicas
+					Expect(coreReplicas).To(BeNumerically(">", 0), "chaos target must start with at least one Harbor core replica")
+				}
+
+				chaosCleanup = func() error {
+					if coreDeployment != "" {
+						if _, err := utils.Run(exec.Command("kubectl", "scale", "deployment", coreDeployment, "-n", coreNamespace, "--replicas", strconv.Itoa(coreReplicas))); err != nil {
+							return fmt.Errorf("restore Harbor Core replica count: %w", err)
+						}
+						if _, err := utils.Run(exec.Command("kubectl", "rollout", "status", "deployment", coreDeployment, "-n", coreNamespace, "--timeout=180s")); err != nil {
+							return fmt.Errorf("wait for Harbor Core recovery: %w", err)
+						}
+					}
+					if err := applyPasswordSecret(secretName, namespace, adminPass); err != nil {
+						return err
+					}
+					for _, resource := range []string{
+						"project.harbor.harbor-entity-operator.io/" + projectName,
+						"harborconnection.harbor.harbor-entity-operator.io/" + connectionName,
+						"secret/" + secretName,
+					} {
+						args := []string{"delete", resource, "-n", namespace, "--wait=true", "--timeout=2m", "--ignore-not-found=true"}
+						if _, err := utils.Run(exec.Command("kubectl", args...)); err != nil {
+							return fmt.Errorf("delete chaos-test resource %s: %w", resource, err)
+						}
+					}
+					return nil
+				}
+
+				applyFile := writeTempFile(manifest)
 				DeferCleanup(func() { _ = os.Remove(applyFile) })
 				cmd := exec.Command("kubectl", "apply", "-f", applyFile)
 				_, err := utils.Run(cmd)
 				Expect(err).NotTo(HaveOccurred())
 
-				waitReady("harborconnection", connName)
+				waitReady("harborconnection", connectionName)
+				waitReady("project", projectName)
+				projectID := harborProjectID(baseURL, adminUser, adminPass, projectName)
+				projectPath := fmt.Sprintf("/api/v2.0/projects/%d", projectID)
+				Expect(harborHasObject(baseURL, adminUser, adminPass, projectPath, `"public":"false"`)).To(BeTrue())
+
+				By("reconciling a user edit to public and metadata fields")
+				cmd = exec.Command("kubectl", "patch", "project.harbor.harbor-entity-operator.io/"+projectName, "-n", namespace,
+					"--type=merge", "-p", `{"spec":{"public":true,"metadata":{"auto_scan":"true"}}}`)
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred())
+				Eventually(func() bool {
+					return harborHasObject(baseURL, adminUser, adminPass, projectPath, `"public":"true"`) &&
+						harborHasObject(baseURL, adminUser, adminPass, projectPath, `"auto_scan":"true"`)
+				}, 2*time.Minute, 2*time.Second).Should(BeTrue())
+
+				By("repairing a Harbor project deleted outside Kubernetes")
+				_, status := harborAPIRequest(baseURL, adminUser, adminPass, "DELETE", projectPath, "")
+				Expect(status).To(Or(Equal(200), Equal(202), Equal(204)))
+				cmd = exec.Command("kubectl", "patch", "project.harbor.harbor-entity-operator.io/"+projectName, "-n", namespace,
+					"--type=merge", "-p", `{"spec":{"reconcileNonce":"recover-remote-delete"}}`)
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred())
+				recreatedProjectID := 0
+				Eventually(func() bool {
+					output, err := utils.Run(exec.Command("kubectl", "get", "project", projectName, "-n", namespace,
+						"-o", "jsonpath={.status.harborProjectID}"))
+					if err != nil {
+						return false
+					}
+					id, err := strconv.Atoi(strings.TrimSpace(output))
+					if err != nil {
+						return false
+					}
+					recreatedProjectID = id
+					return recreatedProjectID != projectID
+				}, 2*time.Minute, 2*time.Second).Should(BeTrue(), "the controller should replace its stale Harbor ID after remote deletion")
+				Eventually(func() bool {
+					return harborHasObject(baseURL, adminUser, adminPass, "/api/v2.0/projects", fmt.Sprintf(`"name":"%s"`, projectName))
+				}, 2*time.Minute, 2*time.Second).Should(BeTrue())
+				projectID = recreatedProjectID
+				projectPath = fmt.Sprintf("/api/v2.0/projects/%d", projectID)
 				waitReady("project", projectName)
 
-				cmd = exec.Command("kubectl", "patch", "harborconnection.harbor.harbor-entity-operator.io/"+connName,
-					"-n", namespace, "--type=merge", "-p", `{"spec":{"baseURL":"http://does-not-resolve.invalid"}}`)
-				output, err := utils.Run(cmd)
-				Expect(err).To(HaveOccurred())
-				Expect(output).To(ContainSubstring("baseURL is immutable"))
-				waitReady("project", projectName)
-
-				deleteCR("project", projectName)
-				deleteCR("harborconnection", connName)
+				By("recovering after the Harbor credential Secret is accidentally deleted")
 				cmd = exec.Command("kubectl", "delete", "secret", secretName, "-n", namespace, "--wait=true")
-				_, _ = utils.Run(cmd)
+				_, err = utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred())
+				waitConditionReason("harborconnection", connectionName, "Ready", "ReconcileError")
+				waitConditionReason("project", projectName, "Ready", "ReconcileError")
+				err = applyPasswordSecret(secretName, namespace, adminPass)
+				Expect(err).NotTo(HaveOccurred())
+				waitReady("harborconnection", connectionName)
+				waitReady("project", projectName)
+
+				if coreDeployment != "" {
+					By("recovering after the Harbor API becomes temporarily unavailable")
+					cmd = exec.Command("kubectl", "scale", "deployment", coreDeployment, "-n", coreNamespace, "--replicas=0")
+					_, err = utils.Run(cmd)
+					Expect(err).NotTo(HaveOccurred())
+					waitConditionReason("project", projectName, "Ready", "ReconcileError")
+					cmd = exec.Command("kubectl", "scale", "deployment", coreDeployment, "-n", coreNamespace, "--replicas="+strconv.Itoa(coreReplicas))
+					_, err = utils.Run(cmd)
+					Expect(err).NotTo(HaveOccurred())
+					cmd = exec.Command("kubectl", "rollout", "status", "deployment", coreDeployment, "-n", coreNamespace, "--timeout=180s")
+					_, err = utils.Run(cmd)
+					Expect(err).NotTo(HaveOccurred())
+					waitReady("project", projectName)
+				}
 			})
 		})
 
@@ -1168,6 +1158,65 @@ func writeTempFile(contents string) string {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(file.Close()).To(Succeed())
 	return file.Name()
+}
+
+func deleteNamespacedHarborResources(resourceNamespace string) error {
+	output, err := utils.Run(exec.Command("kubectl", "api-resources", "--api-group=harbor.harbor-entity-operator.io", "--namespaced=true", "-o", "name"))
+	if err != nil {
+		return fmt.Errorf("list namespaced Harbor resources: %w", err)
+	}
+
+	var preheatPolicies, resources, connections []string
+	for _, resource := range strings.Fields(output) {
+		switch {
+		case strings.HasPrefix(resource, "preheatpolicies."):
+			preheatPolicies = append(preheatPolicies, resource)
+		case strings.HasPrefix(resource, "harborconnections."):
+			connections = append(connections, resource)
+		default:
+			resources = append(resources, resource)
+		}
+	}
+
+	orderedResources := append([]string(nil), preheatPolicies...)
+	orderedResources = append(orderedResources, resources...)
+	orderedResources = append(orderedResources, connections...)
+	for _, resource := range orderedResources {
+		_, err := utils.Run(exec.Command("kubectl", "delete", resource, "--all", "-n", resourceNamespace,
+			"--wait=true", "--timeout=2m"))
+		if err != nil {
+			return fmt.Errorf("delete %s in namespace %s: %w", resource, resourceNamespace, err)
+		}
+	}
+	return nil
+}
+
+func applyPasswordSecret(name, secretNamespace, password string) error {
+	manifest := fmt.Sprintf(`apiVersion: v1
+kind: Secret
+metadata:
+  name: %s
+  namespace: %s
+type: Opaque
+stringData:
+  password: %s
+`, name, secretNamespace, strconv.Quote(password))
+	file, err := os.CreateTemp("", "harbor-e2e-secret-*.yaml")
+	if err != nil {
+		return fmt.Errorf("create temporary Secret manifest: %w", err)
+	}
+	defer os.Remove(file.Name())
+	if _, err := file.WriteString(manifest); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("write temporary Secret manifest: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close temporary Secret manifest: %w", err)
+	}
+	if _, err := utils.Run(exec.Command("kubectl", "apply", "-f", file.Name())); err != nil {
+		return fmt.Errorf("apply Secret %s/%s: %w", secretNamespace, name, err)
+	}
+	return nil
 }
 
 func generateMetricsCertificate() (certificateFile, keyFile, caFile string) {
@@ -1285,6 +1334,18 @@ func harborHasObject(baseURL, user, pass, path, needle string) bool {
 		out = compact.String()
 	}
 	return strings.Contains(out, needle)
+}
+
+func harborProjectID(baseURL, user, pass, projectName string) int {
+	path := "/api/v2.0/projects?q=" + url.QueryEscape("name="+projectName)
+	body, status := harborAPIRequest(baseURL, user, pass, "GET", path, "")
+	Expect(status).To(Equal(200), "failed to look up Harbor project %q: %s", projectName, body)
+	var projects []struct {
+		ProjectID int `json:"project_id"`
+	}
+	Expect(json.Unmarshal([]byte(body), &projects)).To(Succeed())
+	Expect(projects).To(HaveLen(1), "expected one Harbor project named %q", projectName)
+	return projects[0].ProjectID
 }
 
 type e2eCVEAllowlist struct {

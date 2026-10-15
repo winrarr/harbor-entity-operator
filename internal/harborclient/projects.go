@@ -8,16 +8,21 @@ import (
 )
 
 type ProjectMetadata struct {
-	Public                   string `json:"public,omitempty"`
-	EnableContentTrust       string `json:"enable_content_trust,omitempty"`
-	EnableContentTrustCosign string `json:"enable_content_trust_cosign,omitempty"`
-	PreventVul               string `json:"prevent_vul,omitempty"`
-	Severity                 string `json:"severity,omitempty"`
-	AutoScan                 string `json:"auto_scan,omitempty"`
-	AutoSBOMGeneration       string `json:"auto_sbom_generation,omitempty"`
-	ReuseSysCVEAllowlist     string `json:"reuse_sys_cve_allowlist,omitempty"`
-	RetentionID              string `json:"retention_id,omitempty"`
-	ProxySpeedKB             string `json:"proxy_speed_kb,omitempty"`
+	Public                    string  `json:"public,omitempty"`
+	EnableContentTrust        *string `json:"enable_content_trust,omitempty"`
+	EnableContentTrustCosign  *string `json:"enable_content_trust_cosign,omitempty"`
+	PreventVul                *string `json:"prevent_vul,omitempty"`
+	Severity                  *string `json:"severity,omitempty"`
+	AutoScan                  *string `json:"auto_scan,omitempty"`
+	AutoSBOMGeneration        *string `json:"auto_sbom_generation,omitempty"`
+	ReuseSysCVEAllowlist      *string `json:"reuse_sys_cve_allowlist,omitempty"`
+	RetentionID               *string `json:"retention_id,omitempty"`
+	ProxySpeedKB              *string `json:"proxy_speed_kb,omitempty"`
+	MaxUpstreamConn           *string `json:"max_upstream_conn,omitempty"`
+	ProxyCacheLocalOnNotFound *string `json:"proxy_cache_local_on_not_found,omitempty"`
+	ProxyReferrerAPI          *string `json:"proxy_referrer_api,omitempty"`
+	ProxyCacheFilterPattern   *string `json:"proxy_cache_filter_pattern,omitempty"`
+	ProxyCacheFilterKind      *string `json:"proxy_cache_filter_kind,omitempty"`
 }
 
 type CVEAllowlistItem struct {
@@ -27,8 +32,8 @@ type CVEAllowlistItem struct {
 type CVEAllowlist struct {
 	ID           int                `json:"id,omitempty"`
 	ProjectID    int                `json:"project_id,omitempty"`
-	ExpiresAt    int                `json:"expires_at,omitempty"`
-	Items        []CVEAllowlistItem `json:"items,omitempty"`
+	ExpiresAt    *int64             `json:"expires_at"`
+	Items        []CVEAllowlistItem `json:"items"`
 	CreationTime string             `json:"creation_time,omitempty"`
 	UpdateTime   string             `json:"update_time,omitempty"`
 }
@@ -47,8 +52,7 @@ type CreateProjectRequest struct {
 	Public       bool            `json:"public,omitempty"`
 	Owner        string          `json:"owner,omitempty"`
 	Metadata     ProjectMetadata `json:"metadata"`
-	CVEAllowlist CVEAllowlist    `json:"cve_allowlist"`
-	StorageLimit *int            `json:"storage_limit,omitempty"`
+	CVEAllowlist *CVEAllowlist   `json:"cve_allowlist,omitempty"`
 	RegistryID   *int            `json:"registry_id,omitempty"`
 }
 

@@ -16,9 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	harborv1alpha1 "github.com/winrarr/harbor-entity-operator/api/v1alpha1"
 	"github.com/winrarr/harbor-entity-operator/internal/harborclient"
@@ -306,20 +304,16 @@ func (r *GlobalHarborEntityReconciler) SetupWithManager(mgr ctrl.Manager) error 
 		return err
 	}
 	if r.ops.name == "preheatinstance" {
-		builder.Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, object client.Object) []reconcile.Request {
-			var instances harborv1alpha1.PreheatInstanceList
-			if err := r.List(ctx, &instances); err != nil {
-				return nil
-			}
-			requests := []reconcile.Request{}
-			for i := range instances.Items {
-				ref := instances.Items[i].Spec.AuthInfoSecretRef
-				if ref != nil && ref.Namespace == object.GetNamespace() && ref.Name == object.GetName() {
-					requests = append(requests, reconcile.Request{NamespacedName: types.NamespacedName{Name: instances.Items[i].Name}})
+		builder = watchSecretReferences(builder, r.Client,
+			func() client.ObjectList { return &harborv1alpha1.PreheatInstanceList{} },
+			func(obj client.Object) []harborv1alpha1.SecretReference {
+				ref := obj.(*harborv1alpha1.PreheatInstance).Spec.AuthInfoSecretRef
+				if ref == nil {
+					return nil
 				}
-			}
-			return requests
-		}))
+				return []harborv1alpha1.SecretReference{{Name: ref.Name, Namespace: ref.Namespace}}
+			},
+		)
 	}
 	return builder.Complete(r)
 }
@@ -556,7 +550,7 @@ func NewPreheatInstanceReconciler(c client.Client, scheme *runtime.Scheme, optio
 		instance := obj.(*harborv1alpha1.PreheatInstance)
 		for i := range policies.Items {
 			policy := &policies.Items[i]
-			if policy.Spec.ProviderRef == instance.Name {
+			if policy.Spec.ProviderRef.Name == instance.Name {
 				return fmt.Errorf("PreheatInstance %q is still referenced by PreheatPolicy %s/%s", instance.Name, policy.Namespace, policy.Name)
 			}
 		}

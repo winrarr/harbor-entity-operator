@@ -166,9 +166,9 @@ The Go types and markers are authoritative. Generated outputs are committed for 
 
 ## Verification boundaries
 
-- API and focused unit tests cover type behavior and deterministic helpers.
+- API and focused unit tests cover type behavior, deterministic helpers, validation, and reconciliation decisions.
 - Harbor client tests exercise HTTP requests, responses, pagination, and errors against test servers.
-- Controller envtest suites exercise observable reconciliation against a real Kubernetes API server with simulated Harbor endpoints.
-- The E2E suite deploys the operator and Harbor into Kind to validate the complete runtime and packaging path.
+- Controller EnvTest suites exercise API-server validation and observable reconciliation with simulated Harbor endpoints; they do not deploy the operator manager.
+- The E2E suite is reserved for deployed-manager behavior, real Kubernetes networking and authorization, and Harbor-side effects that test servers cannot reliably establish.
 
 The canonical commands and CI mapping are documented in [Testing and Verification](contributing/testing.md). Consequential changes to this architecture belong in [architecture decision records](decisions/index.md); the current page should describe the resulting system, not preserve historical rationale.

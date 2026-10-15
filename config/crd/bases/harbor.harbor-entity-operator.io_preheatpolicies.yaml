@@ -23,6 +23,13 @@ spec:
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: Ready
       type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].reason
+      name: Reason
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].message
+      name: Message
+      priority: 1
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -105,6 +112,9 @@ spec:
                     type: string
                   name:
                     description: Name of the referenced Harbor connection object.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                     type: string
                 required:
                 - name
@@ -115,11 +125,15 @@ spec:
                 properties:
                   name:
                     description: Name of the Project resource.
+                    maxLength: 253
                     minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                     type: string
                   namespace:
                     description: Namespace of the Project resource. Defaults to the
                       referencing resource namespace.
+                    maxLength: 63
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$
                     type: string
                 required:
                 - name
@@ -127,7 +141,16 @@ spec:
               providerRef:
                 description: ProviderRef identifies the cluster-scoped PreheatInstance
                   used by this policy.
-                type: string
+                properties:
+                  name:
+                    description: Name of the PreheatInstance resource.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
+                    type: string
+                required:
+                - name
+                type: object
               reconcileNonce:
                 description: ReconcileNonce forces an immediate reconcile when updated.
                 type: string
@@ -139,6 +162,9 @@ spec:
             - projectRef
             - providerRef
             type: object
+            x-kubernetes-validations:
+            - message: driftDetectionInterval must not be negative
+              rule: '!has(self.driftDetectionInterval) || !self.driftDetectionInterval.startsWith(''-'')'
           status:
             description: PreheatPolicyStatus records the Harbor identity of the project
               policy.

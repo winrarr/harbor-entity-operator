@@ -7,6 +7,7 @@ on:
       - 'release/v*'
   push:
     branches:
+      - main
       - 'release/v*'
   workflow_dispatch:
 
@@ -26,18 +27,25 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Detect e2e-relevant changes
+        if: github.event_name != 'workflow_dispatch'
         id: changes
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         with:
+          base: ${{ github.ref }}
+          predicate-quantifier: some-with-excludes
           filters: |
             e2e:
-              - 'api/**'
-              - 'charts/**'
+              # API source contracts are exercised by make test; chart CRDs below cover cluster installation.
+              - 'charts/harbor-entity-operator/crds/**'
+              - 'charts/harbor-entity-operator/templates/**'
+              - 'charts/harbor-entity-operator/values.yaml'
+              - 'charts/harbor-entity-operator/values.schema.json'
               - 'cmd/**'
-              - 'config/**'
-              - 'hack/**'
+              - 'hack/kind-configuration*.yaml'
+              - 'hack/make-config.mk'
               - 'internal/**'
-              - 'test/**'
+              - '!internal/**/*_test.go'
+              - 'test/e2e/**'
               - '.dockerignore'
               - 'Dockerfile'
               - 'Makefile'

@@ -1,12 +1,9 @@
 package v1alpha1
 
-import (
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-)
+import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 // UserSpec defines the desired state of User.
-// +kubebuilder:validation:XValidation:rule="size(self.passwordSecretRef.name) > 0",message="passwordSecretRef.name is required"
+// +kubebuilder:validation:XValidation:rule="size(self.passwordSecretRef.key) > 0",message="passwordSecretRef.key is required"
 type UserSpec struct {
 	HarborSpecBase `json:",inline"`
 
@@ -28,8 +25,8 @@ type UserSpec struct {
 	// +optional
 	Comment string `json:"comment,omitempty"`
 
-	// PasswordSecretRef references the required secret key containing the user's password.
-	PasswordSecretRef corev1.SecretKeySelector `json:"passwordSecretRef"`
+	// PasswordSecretRef references the Secret and required key containing the user's password.
+	PasswordSecretRef SecretReference `json:"passwordSecretRef"`
 }
 
 // UserStatus defines the observed state of User.

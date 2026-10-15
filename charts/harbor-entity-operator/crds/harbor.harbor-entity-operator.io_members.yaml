@@ -110,6 +110,9 @@ spec:
                     type: string
                   name:
                     description: Name of the referenced Harbor connection object.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                     type: string
                 required:
                 - name
@@ -123,11 +126,15 @@ spec:
                     properties:
                       name:
                         description: Name of the UserGroupClaim resource.
+                        maxLength: 253
                         minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                         type: string
                       namespace:
                         description: Namespace of the UserGroupClaim resource. Defaults
                           to the referencing resource namespace.
+                        maxLength: 63
+                        pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$
                         type: string
                     required:
                     - name
@@ -143,11 +150,15 @@ spec:
                     properties:
                       name:
                         description: Name of the User resource.
+                        maxLength: 253
                         minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                         type: string
                       namespace:
                         description: Namespace of the User resource. Defaults to the
                           referencing resource namespace.
+                        maxLength: 63
+                        pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$
                         type: string
                     required:
                     - name
@@ -161,11 +172,15 @@ spec:
                 properties:
                   name:
                     description: Name of the Project resource.
+                    maxLength: 253
                     minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                     type: string
                   namespace:
                     description: Namespace of the Project resource. Defaults to the
                       referencing resource namespace.
+                    maxLength: 63
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$
                     type: string
                 required:
                 - name
@@ -204,6 +219,8 @@ spec:
                 || self.memberUser == oldSelf.memberUser) && has(self.memberGroup)
                 == has(oldSelf.memberGroup) && (!has(self.memberGroup) || self.memberGroup
                 == oldSelf.memberGroup))'
+            - message: driftDetectionInterval must not be negative
+              rule: '!has(self.driftDetectionInterval) || !self.driftDetectionInterval.startsWith(''-'')'
           status:
             description: MemberStatus defines the observed state of Member.
             properties:

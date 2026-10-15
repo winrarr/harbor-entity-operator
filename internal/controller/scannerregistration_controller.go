@@ -194,6 +194,16 @@ func (r *ScannerRegistrationReconciler) SetupWithManager(mgr ctrl.Manager) error
 	if err != nil {
 		return err
 	}
+	builder = watchSecretReferences(builder, r.Client,
+		func() client.ObjectList { return &harborv1alpha1.ScannerRegistrationList{} },
+		func(obj client.Object) []harborv1alpha1.SecretReference {
+			ref := obj.(*harborv1alpha1.ScannerRegistration).Spec.AccessCredentialSecretRef
+			if ref == nil {
+				return nil
+			}
+			return []harborv1alpha1.SecretReference{*ref}
+		},
+	)
 	return builder.Complete(r)
 }
 

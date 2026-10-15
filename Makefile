@@ -1,48 +1,8 @@
+SHELL := /usr/bin/env bash
+.SHELLFLAGS := -o pipefail -ec
 .DEFAULT_GOAL := help
 
-## Image to build and deploy.
-IMG ?= harbor-entity-operator:local
-HARBOR_API_GROUP ?= harbor.harbor-entity-operator.io
-CRD_REF_DOCS_OUTPUT ?= docs/reference/api.md
-DOCS_CONTAINER_IMAGE ?= squidfunk/mkdocs-material:9.7.7
-MKDOCS_CONFIG ?= hack/mkdocs.yml
-# Linked worktrees keep Git metadata outside CURDIR and reference it by its host path.
-DOCS_GIT_COMMON_DIR = $(shell git rev-parse --path-format=absolute --git-common-dir)
-DOCS_CONTAINER_MOUNTS = -v "$(CURDIR)":/docs -v "$(DOCS_GIT_COMMON_DIR)":"$(DOCS_GIT_COMMON_DIR)":ro
-## Kind CNI: default or cilium (with Hubble).
-KIND_CNI ?= default
-KIND_CLUSTER ?= kind
-# renovate: datasource=docker depName=kindest/node
-KIND_NODE_IMAGE ?= kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
-KIND_CONFIG ?= $(if $(filter cilium,$(KIND_CNI)),hack/kind-configuration-cilium.yaml,hack/kind-configuration.yaml)
-# renovate: datasource=docker depName=goharbor/harbor-core
-HARBOR_VERSION ?= v2.15.4
-
-# Tool binaries
-LOCALBIN ?= $(CURDIR)/bin
-CONTROLLER_GEN = $(LOCALBIN)/controller-gen
-SETUP_ENVTEST = $(LOCALBIN)/setup-envtest
-GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
-CRD_REF_DOCS = $(LOCALBIN)/crd-ref-docs
-KIND = $(LOCALBIN)/kind
-
-# Tool versions
-# renovate: datasource=github-releases depName=kubernetes-sigs/controller-tools
-CONTROLLER_TOOLS_VERSION ?= v0.22.0
-ENVTEST_VERSION ?= $(shell go list -m -f "{{ .Version }}" sigs.k8s.io/controller-runtime)
-ENVTEST_K8S_VERSION ?= $(shell go list -m -f "{{ .Version }}" k8s.io/api | awk -F'[v.]' '{printf "1.%d", $$3}')
-# renovate: datasource=github-releases depName=golangci/golangci-lint
-GOLANGCI_LINT_VERSION ?= v2.14.0
-# renovate: datasource=github-releases depName=elastic/crd-ref-docs
-CRD_REF_DOCS_VERSION ?= v0.3.0
-# renovate: datasource=github-releases depName=kubernetes-sigs/kind
-KIND_VERSION ?= v0.33.0
-# renovate: datasource=github-releases depName=cilium/cilium
-CILIUM_VERSION ?= 1.20.2
-
-# Use Bash and fail recipes when a command or pipeline fails.
-SHELL = /usr/bin/env bash -o pipefail
-.SHELLFLAGS = -ec
+include hack/make-config.mk
 
 ##@ General
 
@@ -60,8 +20,13 @@ check: ## Run the non-E2E CI baseline.
 	$(MAKE) build-docs-site
 
 .PHONY: test
-test: $(SETUP_ENVTEST) ## Run non-E2E Go tests.
-	KUBEBUILDER_ASSETS="$(shell $(SETUP_ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./... -coverprofile cover.out
+test: $(SETUP_ENVTEST) ## Run deterministic unit and Kubernetes API contract tests.
+	KUBEBUILDER_ASSETS="$(shell $(SETUP_ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./...
+	$(MAKE) test-scripts
+
+.PHONY: test-scripts
+test-scripts: ## Run deterministic unit tests for repository automation scripts.
+	python3 -m unittest discover -s hack -p 'test_*.py'
 
 .PHONY: test-e2e
 test-e2e: $(KIND) ## Run E2E tests against the current Kind cluster.
@@ -119,7 +84,7 @@ generate-api-reference: $(CRD_REF_DOCS) ## Generate the CRD API reference.
 
 .PHONY: build-docs-site
 build-docs-site: ## Build the site without regenerating its API reference.
-	docker run --rm $(DOCS_CONTAINER_MOUNTS) $(DOCS_CONTAINER_IMAGE) build --strict -f $(MKDOCS_CONFIG)
+	$(CONTAINER_TOOL) run --rm --workdir /docs $(DOCS_CONTAINER_MOUNTS) $(DOCS_CONTAINER_IMAGE) build --strict --config-file $(DOCS_CONFIG)
 
 .PHONY: docs-build
 docs-build: ## Generate the API reference and build the site.
@@ -128,7 +93,7 @@ docs-build: ## Generate the API reference and build the site.
 
 .PHONY: docs-serve
 docs-serve: generate-api-reference ## Generate and serve the site locally.
-	docker run --rm -p 8000:8000 $(DOCS_CONTAINER_MOUNTS) $(DOCS_CONTAINER_IMAGE) serve --dev-addr 0.0.0.0:8000 -f $(MKDOCS_CONFIG)
+	$(CONTAINER_TOOL) run --rm --workdir /docs -p 8000:8000 $(DOCS_CONTAINER_MOUNTS) $(DOCS_CONTAINER_IMAGE) serve --dev-addr 0.0.0.0:8000 --config-file $(DOCS_CONFIG)
 
 .PHONY: update-harbor-openapi
 update-harbor-openapi: ## Refresh the checked-in Harbor OpenAPI specification.
@@ -138,7 +103,7 @@ update-harbor-openapi: ## Refresh the checked-in Harbor OpenAPI specification.
 
 .PHONY: docker-build
 docker-build: ## Build the operator image.
-	docker build -t $(IMG) .
+	$(CONTAINER_TOOL) build -t $(IMG) .
 
 ##@ Deployment
 

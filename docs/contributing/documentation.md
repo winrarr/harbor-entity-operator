@@ -24,7 +24,7 @@ Serve it locally with:
 make docs-serve
 ```
 
-Both targets use the pinned MkDocs Material container configured in the Makefile. Navigation and site configuration live in `hack/mkdocs.yml`.
+Both targets use the pinned Zensical container configured in `hack/make-config.mk`. Navigation and site configuration live in the root `zensical.toml` file.
 
 ## Publishing
 

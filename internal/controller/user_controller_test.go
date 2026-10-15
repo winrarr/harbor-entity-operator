@@ -86,11 +86,8 @@ var _ = Describe("User Controller", func() {
 					HarborSpecBase: harborv1alpha1.HarborSpecBase{
 						HarborConnectionRef: &harborv1alpha1.HarborConnectionReference{Name: connName},
 					},
-					Email: "user@example.com",
-					PasswordSecretRef: corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{Name: userSecretName},
-						Key:                  testPassword,
-					},
+					Email:             "user@example.com",
+					PasswordSecretRef: harborv1alpha1.SecretReference{Name: userSecretName, Key: testPassword},
 				},
 			}
 			Expect(k8sClient.Create(ctx, resource)).To(Succeed())

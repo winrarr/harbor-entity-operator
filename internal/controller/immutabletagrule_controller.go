@@ -213,6 +213,9 @@ func immutableRuleNeedsUpdate(desired harborclient.ImmutableRule, current *harbo
 func normalizeImmutableRule(in harborclient.ImmutableRule) harborclient.ImmutableRule {
 	in.ID = 0
 	in.Params = normalizeAnyMap(in.Params)
+	if in.TagSelectors != nil {
+		in.TagSelectors = append([]harborclient.ImmutableSelector(nil), in.TagSelectors...)
+	}
 	sort.SliceStable(in.TagSelectors, func(i, j int) bool {
 		return immutableSelectorKey(in.TagSelectors[i]) < immutableSelectorKey(in.TagSelectors[j])
 	})
@@ -227,7 +230,7 @@ func normalizeImmutableRule(in harborclient.ImmutableRule) harborclient.Immutabl
 		sort.Strings(keys)
 		sorted := make(map[string][]harborclient.ImmutableSelector, len(in.ScopeSelectors))
 		for _, key := range keys {
-			selectors := in.ScopeSelectors[key]
+			selectors := append([]harborclient.ImmutableSelector(nil), in.ScopeSelectors[key]...)
 			sort.SliceStable(selectors, func(i, j int) bool {
 				return immutableSelectorKey(selectors[i]) < immutableSelectorKey(selectors[j])
 			})

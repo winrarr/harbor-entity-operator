@@ -29,13 +29,13 @@ Keep resource implementations consistent across their API type, Harbor client be
 
 ## Verify changes
 
-Run the normal non-E2E baseline:
+Run the normal deterministic test baseline:
 
 ```sh
 make check
 ```
 
-Use focused targets while iterating:
+Use focused targets while iterating. Run the live E2E suite when a change affects deployed-manager behavior, Kubernetes networking or authorization, or Harbor-side behavior that simulated endpoints cannot establish:
 
 ```sh
 make test

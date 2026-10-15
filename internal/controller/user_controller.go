@@ -188,5 +188,11 @@ func (r *UserReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err != nil {
 		return err
 	}
+	builder = watchSecretReferences(builder, r.Client,
+		func() client.ObjectList { return &harborv1alpha1.UserList{} },
+		func(obj client.Object) []harborv1alpha1.SecretReference {
+			return []harborv1alpha1.SecretReference{obj.(*harborv1alpha1.User).Spec.PasswordSecretRef}
+		},
+	)
 	return builder.Complete(r)
 }

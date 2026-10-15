@@ -37,12 +37,32 @@ An explicit `spec.creationPolicy` always wins over the operator default.
 checked for drift when they are otherwise idle. Set it to `0s` to disable the
 periodic check if that is appropriate for your installation.
 
+## Harbor API traffic
+
+`harborRequestTimeout` bounds the duration of each Harbor API request and
+defaults to `30s`. `harborMaxConcurrentRequests` caps in-flight Harbor API
+requests across every controller in one operator process and defaults to `20`.
+Set the limit to a positive integer when the Helm chart is installed. This
+limits simultaneous slow requests; it does not impose a requests-per-second
+limit. The operator currently has no evidence that an additional rate limiter
+is needed, so request rate remains observable through the existing Harbor API
+request metrics. The Helm values schema rejects zero and negative limits.
+
+Harbor HTTP clients are cached per resolved connection, up to 64 connections.
+Changing the endpoint, credentials, CA bundle, request timeout, or concurrency
+setting replaces that connection's cached client and closes its idle transport
+connections. Credentials and CA data are included only in a one-way cache
+fingerprint and are never used as cache labels. The
+`harbor_operator_harbor_http_client_cache_events_total` metric reports cache
+hits, misses, invalidations, and evictions.
+
 ## Metrics
 
 Metrics are disabled by default. When enabled, the chart can create a
 `ServiceMonitor`. Secure metrics use the chart's configured certificate; for
 production, configure a certificate Secret trusted by your Prometheus
-installation instead of relying on the development certificate.
+installation instead of relying on the development certificate. Harbor API
+client cache events are exposed on the same metrics endpoint.
 
 Network policy is intentionally managed outside the chart. See
 [Multi-Tenancy](multi-tenancy.md#network-policy) for minimal Kubernetes and

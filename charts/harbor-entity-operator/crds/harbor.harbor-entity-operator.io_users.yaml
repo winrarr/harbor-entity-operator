@@ -108,34 +108,39 @@ spec:
                     type: string
                   name:
                     description: Name of the referenced Harbor connection object.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                     type: string
                 required:
                 - name
                 type: object
               passwordSecretRef:
-                description: PasswordSecretRef references the required secret key
-                  containing the user's password.
+                description: PasswordSecretRef references the Secret and required
+                  key containing the user's password.
                 properties:
                   key:
-                    description: The key of the secret to select from.  Must be a
-                      valid secret key.
+                    description: |-
+                      Key inside the Secret data. When omitted, the controller using this
+                      reference will apply a sensible default.
                     type: string
                   name:
-                    default: ""
-                    description: |-
-                      Name of the referent.
-                      This field is effectively required, but due to backwards compatibility is
-                      allowed to be empty. Instances of this type with an empty value here are
-                      almost certainly wrong.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    description: Name of the Secret.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                     type: string
-                  optional:
-                    description: Specify whether the Secret or its key must be defined
-                    type: boolean
+                  namespace:
+                    description: |-
+                      Namespace of the Secret. When omitted, the controller uses the namespace of
+                      the referencing namespaced resource. References from cluster-scoped resources
+                      must set this field explicitly because they have no namespace.
+                    maxLength: 63
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$
+                    type: string
                 required:
-                - key
+                - name
                 type: object
-                x-kubernetes-map-type: atomic
               realname:
                 description: Realname is an optional full name. Defaults to metadata.name.
                 type: string
@@ -147,8 +152,10 @@ spec:
             - passwordSecretRef
             type: object
             x-kubernetes-validations:
-            - message: passwordSecretRef.name is required
-              rule: size(self.passwordSecretRef.name) > 0
+            - message: passwordSecretRef.key is required
+              rule: size(self.passwordSecretRef.key) > 0
+            - message: driftDetectionInterval must not be negative
+              rule: '!has(self.driftDetectionInterval) || !self.driftDetectionInterval.startsWith(''-'')'
           status:
             description: UserStatus defines the observed state of User.
             properties:

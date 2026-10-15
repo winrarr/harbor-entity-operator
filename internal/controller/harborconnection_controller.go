@@ -108,8 +108,14 @@ func (r *HarborConnectionReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *HarborConnectionReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&harborv1alpha1.HarborConnection{}).
-		Named("harborconnection").
-		Complete(r)
+		Named("harborconnection")
+	builder = watchSecretReferences(builder, r.Client,
+		func() client.ObjectList { return &harborv1alpha1.HarborConnectionList{} },
+		func(obj client.Object) []harborv1alpha1.SecretReference {
+			return harborConnectionSecretReferences(obj.(*harborv1alpha1.HarborConnection).Spec)
+		},
+	)
+	return builder.Complete(r)
 }

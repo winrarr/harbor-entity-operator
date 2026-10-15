@@ -82,9 +82,10 @@ type RobotAccess struct {
 }
 
 // RobotPermission defines a permission block for a robot account.
+// +kubebuilder:validation:XValidation:rule="self.kind == 'project' || !has(self.projectRef)",message="projectRef can only be set when kind is project"
 type RobotPermission struct {
 	// Kind defines the permission scope, such as "project" or "system".
-	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Enum=project;system
 	Kind string `json:"kind"`
 
 	// ProjectRef references the Project CR for project-scoped permissions.
@@ -100,6 +101,7 @@ type RobotPermission struct {
 // RobotSpec defines the desired state of Robot.
 // +kubebuilder:validation:XValidation:rule="self.duration == -1 || self.duration > 0",message="duration must be -1 or a positive integer"
 // +kubebuilder:validation:XValidation:rule="has(self.secretRef) || has(self.imagePullSecretRef)",message="at least one of secretRef or imagePullSecretRef must be set"
+// +kubebuilder:validation:XValidation:rule="!has(self.imagePullSecretRef) || !has(self.imagePullSecretRef.key)",message="imagePullSecretRef does not select a data key"
 type RobotSpec struct {
 	HarborSpecBase `json:",inline"`
 
@@ -133,22 +135,22 @@ type RobotSpec struct {
 	// +optional
 	Duration int `json:"duration,omitempty"`
 
-	// SecretRef references the operator-managed secret key holding the robot secret.
-	// The operator writes the generated robot secret to this location and expects
-	// the Secret to either not exist yet or already be managed by this Robot.
-	// The Secret also contains the canonical Harbor robot username under the
-	// reserved key "username".
+	// SecretRef configures the operator-managed Secret holding the robot secret.
+	// The generated Secret also contains Harbor's canonical robot username under
+	// the reserved key "username". Name and key retain their existing defaults;
+	// namespace, labels, and annotations are optional output metadata settings.
 	// At least one of secretRef or imagePullSecretRef must be set.
 	// +optional
-	SecretRef *SecretReference `json:"secretRef,omitempty"`
+	SecretRef *SecretOutputReference `json:"secretRef,omitempty"`
 
-	// ImagePullSecretRef references the operator-managed Secret that contains
+	// ImagePullSecretRef configures the operator-managed Secret that contains
 	// a Kubernetes dockerconfigjson image-pull credential for this robot.
 	// The Secret is written with the Harbor registry host from the resolved
 	// Harbor connection and the current robot credentials. Its namespace
-	// defaults to the Robot namespace.
+	// defaults to the Robot namespace. Name, namespace, labels, and annotations
+	// configure the generated Secret destination and metadata.
 	// +optional
-	ImagePullSecretRef *SecretObjectReference `json:"imagePullSecretRef,omitempty"`
+	ImagePullSecretRef *SecretOutputReference `json:"imagePullSecretRef,omitempty"`
 }
 
 // RobotStatus defines the observed state of Robot.

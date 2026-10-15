@@ -20,6 +20,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -31,7 +33,159 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	harborv1alpha1 "github.com/winrarr/harbor-entity-operator/api/v1alpha1"
+	"github.com/winrarr/harbor-entity-operator/internal/harborclient"
 )
+
+func TestProjectNeedsUpdateUsesSinglePublicField(t *testing.T) {
+	tests := []struct {
+		name       string
+		public     bool
+		harbor     string
+		wantUpdate bool
+	}{
+		{name: "public project already matches", public: true, harbor: "true"},
+		{name: "private project already matches", harbor: "false"},
+		{name: "visibility drift is detected", public: true, harbor: "false", wantUpdate: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			desired := harborclient.CreateProjectRequest{
+				Public:   test.public,
+				Metadata: harborclient.ProjectMetadata{Public: strconv.FormatBool(test.public)},
+			}
+			current := harborclient.Project{
+				Metadata: harborclient.ProjectMetadata{Public: test.harbor},
+			}
+
+			if got := projectNeedsUpdate(desired, current); got != test.wantUpdate {
+				t.Fatalf("projectNeedsUpdate() = %t, want %t", got, test.wantUpdate)
+			}
+		})
+	}
+}
+
+func TestProjectNeedsUpdateLeavesOmittedCVEAllowlistUnmanaged(t *testing.T) {
+	desired := harborclient.CreateProjectRequest{
+		ProjectName: "project",
+		Metadata:    harborclient.ProjectMetadata{Public: "false"},
+	}
+	current := harborclient.Project{
+		Name:     "project",
+		Metadata: harborclient.ProjectMetadata{Public: "false"},
+		CVEAllowlist: harborclient.CVEAllowlist{
+			ID:        7,
+			ProjectID: 42,
+			Items:     []harborclient.CVEAllowlistItem{{CveID: "CVE-2024-12345"}},
+		},
+	}
+
+	if projectNeedsUpdate(desired, current) {
+		t.Fatal("projectNeedsUpdate() requested an update for an omitted CVE allowlist")
+	}
+}
+
+func TestProjectNeedsUpdateClearsExplicitEmptyCVEAllowlist(t *testing.T) {
+	desired := harborclient.CreateProjectRequest{
+		ProjectName:  "project",
+		Metadata:     harborclient.ProjectMetadata{Public: "false"},
+		CVEAllowlist: &harborclient.CVEAllowlist{Items: []harborclient.CVEAllowlistItem{}},
+	}
+	current := harborclient.Project{
+		Name:     "project",
+		Metadata: harborclient.ProjectMetadata{Public: "false"},
+		CVEAllowlist: harborclient.CVEAllowlist{
+			Items: []harborclient.CVEAllowlistItem{{CveID: "CVE-2024-12345"}},
+		},
+	}
+
+	if !projectNeedsUpdate(desired, current) {
+		t.Fatal("projectNeedsUpdate() ignored an explicit request to clear the CVE allowlist")
+	}
+}
+
+func TestProjectNeedsUpdateIgnoresHarborManagedCVEAllowlistIdentity(t *testing.T) {
+	desired := harborclient.CreateProjectRequest{
+		ProjectName: "project",
+		Metadata:    harborclient.ProjectMetadata{Public: "false"},
+	}
+	current := harborclient.Project{
+		Name:     "project",
+		Metadata: harborclient.ProjectMetadata{Public: "false"},
+		CVEAllowlist: harborclient.CVEAllowlist{
+			ID:        7,
+			ProjectID: 42,
+		},
+	}
+
+	if got := projectNeedsUpdate(desired, current); got {
+		t.Fatal("projectNeedsUpdate() requested an update for Harbor-generated CVE allowlist IDs")
+	}
+}
+
+func TestProjectNeedsUpdateIgnoresHarborDefaultOwnerWhenUnspecified(t *testing.T) {
+	desired := harborclient.CreateProjectRequest{
+		ProjectName: "project",
+		Metadata:    harborclient.ProjectMetadata{Public: "false"},
+	}
+	current := harborclient.Project{
+		Name:      "project",
+		OwnerName: "admin",
+		Metadata:  harborclient.ProjectMetadata{Public: "false"},
+	}
+
+	if got := projectNeedsUpdate(desired, current); got {
+		t.Fatal("projectNeedsUpdate() requested an update for an unspecified Harbor-defaulted owner")
+	}
+}
+
+func TestProjectNeedsUpdateIgnoresUnspecifiedProjectMetadataDefaults(t *testing.T) {
+	retentionID := "3"
+	desired := harborclient.CreateProjectRequest{
+		ProjectName: "project",
+		Public:      true,
+		Metadata:    harborclient.ProjectMetadata{Public: "true"},
+	}
+	current := harborclient.Project{
+		Name:      "project",
+		OwnerName: "admin",
+		Metadata: harborclient.ProjectMetadata{
+			Public:      "true",
+			RetentionID: &retentionID,
+		},
+	}
+
+	if got := projectNeedsUpdate(desired, current); got {
+		t.Fatal("projectNeedsUpdate() requested an update for unspecified Harbor-defaulted metadata")
+	}
+}
+
+func TestProjectNeedsUpdateCanClearExplicitlyEmptyMetadata(t *testing.T) {
+	empty := ""
+	currentPattern := "release/**"
+	desired := harborclient.CreateProjectRequest{
+		ProjectName: "project",
+		Metadata: harborclient.ProjectMetadata{
+			Public:                  "false",
+			ProxyCacheFilterPattern: &empty,
+		},
+	}
+	current := harborclient.Project{
+		Name: "project",
+		Metadata: harborclient.ProjectMetadata{
+			Public:                  "false",
+			ProxyCacheFilterPattern: &currentPattern,
+		},
+	}
+
+	if !projectNeedsUpdate(desired, current) {
+		t.Fatal("projectNeedsUpdate() ignored an explicit empty value to clear metadata")
+	}
+	current.Metadata.ProxyCacheFilterPattern = nil
+	if projectNeedsUpdate(desired, current) {
+		t.Fatal("projectNeedsUpdate() requested an update when Harbor omitted a cleared empty metadata value")
+	}
+}
 
 var _ = Describe("Project Controller", func() {
 	const projectsPath = "/api/v2.0/projects"

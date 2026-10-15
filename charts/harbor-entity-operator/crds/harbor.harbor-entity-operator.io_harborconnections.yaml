@@ -59,8 +59,11 @@ spec:
             description: HarborConnectionSpec defines the desired state of HarborConnection.
             properties:
               baseURL:
-                description: BaseURL is the Harbor API endpoint.
-                format: url
+                description: |-
+                  BaseURL is the Harbor API endpoint.
+                  It must be an absolute HTTP or HTTPS URL without query or fragment components.
+                format: uri
+                pattern: ^https?://[^/?#]+(/[^?#]*)?$
                 type: string
               caBundle:
                 description: CABundle is a PEM-encoded CA bundle for validating Harbor
@@ -78,13 +81,17 @@ spec:
                     type: string
                   name:
                     description: Name of the Secret.
+                    maxLength: 253
                     minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                     type: string
                   namespace:
                     description: |-
                       Namespace of the Secret. When omitted, the controller uses the namespace of
                       the referencing namespaced resource. References from cluster-scoped resources
                       must set this field explicitly because they have no namespace.
+                    maxLength: 63
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$
                     type: string
                 required:
                 - name
@@ -105,13 +112,17 @@ spec:
                         type: string
                       name:
                         description: Name of the Secret.
+                        maxLength: 253
                         minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                         type: string
                       namespace:
                         description: |-
                           Namespace of the Secret. When omitted, the controller uses the namespace of
                           the referencing namespaced resource. References from cluster-scoped resources
                           must set this field explicitly because they have no namespace.
+                        maxLength: 63
+                        pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$
                         type: string
                     required:
                     - name
@@ -139,13 +150,17 @@ spec:
                         type: string
                       name:
                         description: Name of the Secret.
+                        maxLength: 253
                         minLength: 1
+                        pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                         type: string
                       namespace:
                         description: |-
                           Namespace of the Secret. When omitted, the controller uses the namespace of
                           the referencing namespaced resource. References from cluster-scoped resources
                           must set this field explicitly because they have no namespace.
+                        maxLength: 63
+                        pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$
                         type: string
                     required:
                     - name

@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -49,6 +50,45 @@ func TestGetHarborAuthReadsUsernameAndPasswordFromSecret(t *testing.T) {
 	}
 	if password != "token" {
 		t.Fatalf("password = %q, want %q", password, "token")
+	}
+}
+
+func TestRequestsForSecretReferencesIncludesDefaultAndExplicitNamespaces(t *testing.T) {
+	t.Parallel()
+
+	scheme := runtime.NewScheme()
+	if err := harborv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("add Harbor scheme: %v", err)
+	}
+	resources := []client.Object{
+		&harborv1alpha1.User{
+			ObjectMeta: metav1.ObjectMeta{Name: "local", Namespace: "tenant-a"},
+			Spec:       harborv1alpha1.UserSpec{PasswordSecretRef: harborv1alpha1.SecretReference{Name: "credentials", Key: "password"}},
+		},
+		&harborv1alpha1.User{
+			ObjectMeta: metav1.ObjectMeta{Name: "cross-namespace", Namespace: "tenant-b"},
+			Spec:       harborv1alpha1.UserSpec{PasswordSecretRef: harborv1alpha1.SecretReference{Name: "credentials", Namespace: "shared-secrets", Key: "password"}},
+		},
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(resources...).Build()
+	newList := func() client.ObjectList { return &harborv1alpha1.UserList{} }
+	referencesFor := func(obj client.Object) []harborv1alpha1.SecretReference {
+		return []harborv1alpha1.SecretReference{obj.(*harborv1alpha1.User).Spec.PasswordSecretRef}
+	}
+
+	for _, test := range []struct {
+		secretNamespace string
+		want            types.NamespacedName
+	}{
+		{secretNamespace: "tenant-a", want: types.NamespacedName{Namespace: "tenant-a", Name: "local"}},
+		{secretNamespace: "shared-secrets", want: types.NamespacedName{Namespace: "tenant-b", Name: "cross-namespace"}},
+	} {
+		requests := requestsForSecretReferences(context.Background(), c, newList, referencesFor, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "credentials", Namespace: test.secretNamespace},
+		})
+		if len(requests) != 1 || requests[0].NamespacedName != test.want {
+			t.Fatalf("requests for Secret namespace %q = %#v, want only %s", test.secretNamespace, requests, test.want)
+		}
 	}
 }
 

@@ -10,3 +10,7 @@ spec:
     name: harborconnection-sample
     kind: HarborConnection
   public: false
+  metadata:
+    auto_scan: "true"
+    severity: high
+    prevent_vul: "true"

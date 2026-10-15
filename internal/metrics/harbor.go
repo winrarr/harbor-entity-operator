@@ -23,10 +23,24 @@ var (
 		},
 		[]string{"method", "endpoint", "status"},
 	)
+
+	harborHTTPClientCacheEvents = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "harbor_operator_harbor_http_client_cache_events_total",
+			Help: "Harbor HTTP client cache events, with event set to hit, miss, invalidation, or eviction.",
+		},
+		[]string{"event"},
+	)
 )
 
 func init() {
 	prometheus.MustRegister(harborAPIRequestsTotal, harborAPIRequestDurationSeconds)
+	prometheus.MustRegister(harborHTTPClientCacheEvents)
+}
+
+// ObserveHarborHTTPClientCache records a bounded-cardinality cache event.
+func ObserveHarborHTTPClientCache(event string) {
+	harborHTTPClientCacheEvents.WithLabelValues(event).Inc()
 }
 
 // ObserveHarborRequest records a single Harbor API request.

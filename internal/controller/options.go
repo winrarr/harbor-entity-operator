@@ -10,6 +10,10 @@ import (
 )
 
 const defaultHarborRequestTimeout = 30 * time.Second
+const defaultHarborMaxConcurrentRequests = 20
+
+// DefaultHarborMaxConcurrentRequests is the process-wide in-flight request cap.
+func DefaultHarborMaxConcurrentRequests() int { return defaultHarborMaxConcurrentRequests }
 
 // OperatorOptions is immutable runtime configuration shared by reconcilers.
 // Construct it before starting the controller manager and pass it by value.
@@ -19,6 +23,9 @@ type OperatorOptions struct {
 	allowCrossNamespaceReferences *bool
 	defaultDriftDetectionInterval time.Duration
 	harborRequestTimeout          time.Duration
+	harborMaxConcurrentRequests   int
+	harborClientCache             *harborHTTPClientCache
+	harborRequestGate             *requestGate
 	secretReader                  client.Reader
 }
 
@@ -30,6 +37,7 @@ type OperatorConfig struct {
 	AllowCrossNamespaceReferences *bool
 	DefaultDriftDetectionInterval time.Duration
 	HarborRequestTimeout          time.Duration
+	HarborMaxConcurrentRequests   int
 }
 
 func NewOperatorOptions(config OperatorConfig) (OperatorOptions, error) {
@@ -42,6 +50,13 @@ func NewOperatorOptions(config OperatorConfig) (OperatorOptions, error) {
 	if config.HarborRequestTimeout <= 0 {
 		return OperatorOptions{}, fmt.Errorf("harbor request timeout must be greater than zero")
 	}
+	if config.HarborMaxConcurrentRequests < 0 {
+		return OperatorOptions{}, fmt.Errorf("harbor max concurrent requests must not be negative")
+	}
+	maxConcurrentRequests := config.HarborMaxConcurrentRequests
+	if maxConcurrentRequests == 0 {
+		maxConcurrentRequests = defaultHarborMaxConcurrentRequests
+	}
 
 	return OperatorOptions{
 		forcedHarborConnection:        strings.TrimSpace(config.ForcedHarborConnection),
@@ -49,7 +64,17 @@ func NewOperatorOptions(config OperatorConfig) (OperatorOptions, error) {
 		allowCrossNamespaceReferences: config.AllowCrossNamespaceReferences,
 		defaultDriftDetectionInterval: config.DefaultDriftDetectionInterval,
 		harborRequestTimeout:          config.HarborRequestTimeout,
+		harborMaxConcurrentRequests:   maxConcurrentRequests,
+		harborClientCache:             newHarborHTTPClientCache(defaultHarborClientCacheCapacity),
+		harborRequestGate:             newRequestGate(maxConcurrentRequests),
 	}, nil
+}
+
+func (o OperatorOptions) maxConcurrentRequests() int {
+	if o.harborMaxConcurrentRequests == 0 {
+		return defaultHarborMaxConcurrentRequests
+	}
+	return o.harborMaxConcurrentRequests
 }
 
 func (o OperatorOptions) allowsCrossNamespaceReferences() bool {
