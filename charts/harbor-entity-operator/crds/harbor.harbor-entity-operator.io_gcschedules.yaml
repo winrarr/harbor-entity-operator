@@ -95,6 +95,9 @@ spec:
                     type: string
                   name:
                     description: Name of the referenced Harbor connection object.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                     type: string
                 required:
                 - name
@@ -136,6 +139,9 @@ spec:
             required:
             - schedule
             type: object
+            x-kubernetes-validations:
+            - message: driftDetectionInterval must not be negative
+              rule: '!has(self.driftDetectionInterval) || !self.driftDetectionInterval.startsWith(''-'')'
           status:
             description: GCScheduleStatus defines the observed state of GCSchedule.
             properties:

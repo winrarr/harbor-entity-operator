@@ -242,13 +242,13 @@ func (r *PreheatPolicyReconciler) resolveProject(ctx context.Context, policy *ha
 }
 
 func (r *PreheatPolicyReconciler) resolveProvider(ctx context.Context, policy *harborv1alpha1.PreheatPolicy, hc *harborclient.Client) (*harborv1alpha1.PreheatInstance, error) {
-	if policy.Spec.ProviderRef == "" {
+	if policy.Spec.ProviderRef.Name == "" {
 		return nil, fmt.Errorf("spec.providerRef is required")
 	}
 	var instance harborv1alpha1.PreheatInstance
-	if err := r.Get(ctx, types.NamespacedName{Name: policy.Spec.ProviderRef}, &instance); err != nil {
+	if err := r.Get(ctx, types.NamespacedName{Name: policy.Spec.ProviderRef.Name}, &instance); err != nil {
 		if client.IgnoreNotFound(err) == nil {
-			return nil, &dependencyNotReadyError{kind: "PreheatInstance", key: types.NamespacedName{Name: policy.Spec.ProviderRef}, reason: dependencyResourceNotFoundReason}
+			return nil, &dependencyNotReadyError{kind: "PreheatInstance", key: types.NamespacedName{Name: policy.Spec.ProviderRef.Name}, reason: dependencyResourceNotFoundReason}
 		}
 		return nil, err
 	}
@@ -311,7 +311,7 @@ func (r *PreheatPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		}
 		requests := []reconcile.Request{}
 		for i := range policies.Items {
-			if policies.Items[i].Spec.ProviderRef == object.GetName() {
+			if policies.Items[i].Spec.ProviderRef.Name == object.GetName() {
 				requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&policies.Items[i])})
 			}
 		}

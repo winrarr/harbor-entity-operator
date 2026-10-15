@@ -211,6 +211,19 @@ func (r *WebhookPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err != nil {
 		return err
 	}
+	builder = watchSecretReferences(builder, r.Client,
+		func() client.ObjectList { return &harborv1alpha1.WebhookPolicyList{} },
+		func(obj client.Object) []harborv1alpha1.SecretReference {
+			policy := obj.(*harborv1alpha1.WebhookPolicy)
+			references := make([]harborv1alpha1.SecretReference, 0, len(policy.Spec.Targets))
+			for _, target := range policy.Spec.Targets {
+				if target.AuthHeaderSecretRef != nil {
+					references = append(references, *target.AuthHeaderSecretRef)
+				}
+			}
+			return references
+		},
+	)
 	return builder.Complete(r)
 }
 
@@ -229,6 +242,12 @@ func normalizeWebhookPolicy(in harborclient.WebhookPolicy) harborclient.WebhookP
 	in.Creator = ""
 	in.CreationTime = ""
 	in.UpdateTime = ""
+	if in.EventTypes != nil {
+		in.EventTypes = append([]string(nil), in.EventTypes...)
+	}
+	if in.Targets != nil {
+		in.Targets = append([]harborclient.WebhookTarget(nil), in.Targets...)
+	}
 	for i := range in.Targets {
 		in.Targets[i].AuthHeader = ""
 	}

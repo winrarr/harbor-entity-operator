@@ -13,13 +13,13 @@ Generated outputs include `api/v1alpha1/zz_generated.deepcopy.go`, `config/crd/b
 ### Autonomy, keyed to blast radius
 
 - **Just do it** when a change is reversible, localized, and does not alter a public contract. Do not ask permission for the obvious.
-- **Propose first and wait** when a change touches architecture, CRD schema or compatibility, ownership or deletion semantics, release behavior, or is hard to undo — even if you are confident. "Obvious" is not sufficient on its own here.
+- **Propose first and wait** when a change touches architecture, ownership or deletion semantics, release behavior, or is hard to undo — even if you are confident. "Obvious" is not sufficient on its own here.
 
 ### Direction
 
 - Start with Harbor's native resource model, scopes, identities, relationships, and API behavior. Add operator-specific abstractions only when they solve a concrete Kubernetes reconciliation or safety problem.
 - Treat multi-tenancy as a first-class design concern. For every resource change, consider Harbor-global identity and lifecycle, namespace and Secret boundaries, cross-namespace references, deletion blast radius, and the operator's privileged access to Harbor.
-- When changing public contracts or persisted Kubernetes resource shape, flag backwards-compatibility implications before implementing so they can be weighed.
+- This project has no users yet; do not preserve compatibility for unused API shapes. Prefer forward-only API evolution, including breaking CRD changes, when it improves correctness or clarity.
 - When a task outgrows a simple existing design, a refactor is welcome: do it if it is clearly right and in the just-do-it category; propose it otherwise.
 
 ### Suggesting improvements

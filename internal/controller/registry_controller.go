@@ -268,5 +268,22 @@ func (r *RegistryReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err != nil {
 		return err
 	}
+	builder = watchSecretReferences(builder, r.Client,
+		func() client.ObjectList { return &harborv1alpha1.RegistryList{} },
+		func(obj client.Object) []harborv1alpha1.SecretReference {
+			registry := obj.(*harborv1alpha1.Registry)
+			references := make([]harborv1alpha1.SecretReference, 0, 3)
+			if registry.Spec.CACertificateRef != nil {
+				references = append(references, *registry.Spec.CACertificateRef)
+			}
+			if registry.Spec.Credential != nil {
+				references = append(references,
+					registry.Spec.Credential.AccessKeySecretRef,
+					registry.Spec.Credential.AccessSecretSecretRef,
+				)
+			}
+			return references
+		},
+	)
 	return builder.Complete(r)
 }

@@ -262,6 +262,9 @@ func retentionNeedsUpdate(desired harborclient.RetentionPolicy, current *harborc
 
 func normalizeRetentionPolicy(in harborclient.RetentionPolicy) harborclient.RetentionPolicy {
 	in.ID = 0
+	if in.Rules != nil {
+		in.Rules = append([]harborclient.RetentionRule(nil), in.Rules...)
+	}
 	for i := range in.Rules {
 		in.Rules[i] = normalizeRetentionRule(in.Rules[i])
 	}
@@ -327,12 +330,12 @@ func (r *RetentionPolicyReconciler) findExistingRetentionID(ctx context.Context,
 	if err != nil {
 		return 0, err
 	}
-	if project.Metadata.RetentionID == "" {
+	if project.Metadata.RetentionID == nil || *project.Metadata.RetentionID == "" {
 		return 0, fmt.Errorf("project %d has no retention_id metadata", scope.Ref)
 	}
-	id, err := strconv.Atoi(project.Metadata.RetentionID)
+	id, err := strconv.Atoi(*project.Metadata.RetentionID)
 	if err != nil {
-		return 0, fmt.Errorf("parse retention_id %q: %w", project.Metadata.RetentionID, err)
+		return 0, fmt.Errorf("parse retention_id %q: %w", *project.Metadata.RetentionID, err)
 	}
 	return id, nil
 }

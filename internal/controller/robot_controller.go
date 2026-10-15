@@ -696,6 +696,20 @@ func (r *RobotReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err != nil {
 		return err
 	}
+	builder = watchSecretReferences(builder, r.Client,
+		func() client.ObjectList { return &harborv1alpha1.RobotList{} },
+		func(obj client.Object) []harborv1alpha1.SecretReference {
+			robot := obj.(*harborv1alpha1.Robot)
+			references := make([]harborv1alpha1.SecretReference, 0, 2)
+			if ref := robot.Spec.SecretRef; ref != nil {
+				references = append(references, *ref)
+			}
+			if ref := robot.Spec.ImagePullSecretRef; ref != nil {
+				references = append(references, harborv1alpha1.SecretReference{Name: ref.Name, Namespace: ref.Namespace})
+			}
+			return references
+		},
+	)
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &harborv1alpha1.Robot{}, robotProjectRefIndex, func(raw client.Object) []string {
 		robot := raw.(*harborv1alpha1.Robot)
 		keys := make([]string, 0, len(robot.Spec.Permissions))

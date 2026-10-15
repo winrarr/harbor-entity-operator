@@ -40,7 +40,7 @@ Package v1alpha1 contains API Schema definitions for the harbor v1alpha1 API gro
 
 
 
-CVEAllowlist defines the CVE allowlist configuration.
+CVEAllowlist defines the writable project CVE allowlist configuration.
 
 
 
@@ -49,12 +49,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `id` _integer_ |  |  |  |
-| `project_id` _integer_ |  |  |  |
-| `expires_at` _integer_ |  |  |  |
-| `items` _[CVEAllowlistItem](#cveallowlistitem) array_ |  |  |  |
-| `creation_time` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.36/#time-v1-meta)_ |  |  |  |
-| `update_time` _[Time](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.36/#time-v1-meta)_ |  |  |  |
+| `expiresAt` _integer_ | ExpiresAt is the optional expiration time as seconds since the Unix epoch.<br />Omit it for a non-expiring allowlist. |  | Minimum: 0 <br />Optional: \{\} <br /> |
+| `items` _[CVEAllowlistItem](#cveallowlistitem) array_ | Items is the complete desired list of CVE identifiers. |  |  |
 
 
 #### CVEAllowlistItem
@@ -70,7 +66,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `cve_id` _string_ |  |  |  |
+| `cveID` _string_ | CveID is the CVE identifier, such as CVE-2024-12345. |  | MinLength: 1 <br /> |
 
 
 #### ClusterHarborConnection
@@ -424,7 +420,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | Name of the referenced Harbor connection object. |  |  |
+| `name` _string_ | Name of the referenced Harbor connection object. |  | MaxLength: 253 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?)*$` <br /> |
 | `kind` _[HarborConnectionReferenceKind](#harborconnectionreferencekind)_ | Kind selects the Harbor connection object kind.<br />Defaults to HarborConnection. | HarborConnection | Enum: [HarborConnection ClusterHarborConnection] <br />Optional: \{\} <br /> |
 
 
@@ -459,7 +455,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `baseURL` _string_ | BaseURL is the Harbor API endpoint. |  | Format: url <br /> |
+| `baseURL` _string_ | BaseURL is the Harbor API endpoint.<br />It must be an absolute HTTP or HTTPS URL without query or fragment components. |  | Format: uri <br />Pattern: `^https?://[^/?#]+(/[^?#]*)?$` <br /> |
 | `credentials` _[Credentials](#credentials)_ | Credentials holds the default credentials for Harbor API calls.<br />Omit this field to connect without authentication. |  | Optional: \{\} <br /> |
 | `caBundle` _string_ | CABundle is a PEM-encoded CA bundle for validating Harbor TLS certificates. |  | Optional: \{\} <br /> |
 | `caBundleSecretRef` _[SecretReference](#secretreference)_ | CABundleSecretRef references a Secret containing a PEM-encoded CA bundle.<br />When set, it is mutually exclusive with caBundle. |  | Optional: \{\} <br /> |
@@ -496,9 +492,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `resource` _string_ | Resource is the Harbor resource name. |  |  |
-| `action` _string_ | Action is the Harbor action name, such as pull, push, read, or delete. |  |  |
-| `effect` _string_ | Effect is the permission effect. |  |  |
+| `resource` _string_ | Resource is the Harbor resource name. |  | MinLength: 1 <br /> |
+| `action` _string_ | Action is the Harbor action name, such as pull, push, read, or delete. |  | MinLength: 1 <br /> |
+| `effect` _string_ | Effect is the permission effect. |  | MinLength: 1 <br /> |
 
 
 #### HarborRolePermission
@@ -514,9 +510,9 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `kind` _string_ | Kind is the Harbor permission category. |  |  |
+| `kind` _string_ | Kind is the Harbor permission category. |  | MinLength: 1 <br /> |
 | `namespace` _string_ | Namespace scopes the permission to a Harbor resource namespace. |  | Optional: \{\} <br /> |
-| `access` _[HarborRoleAccess](#harborroleaccess) array_ | Access contains the resource/action/effect rules. |  |  |
+| `access` _[HarborRoleAccess](#harborroleaccess) array_ | Access contains the resource/action/effect rules. |  | MinItems: 1 <br /> |
 
 
 #### HarborRoleSpec
@@ -538,7 +534,7 @@ _Appears in:_
 | `reconcileNonce` _string_ | ReconcileNonce forces an immediate reconcile when updated. |  | Optional: \{\} <br /> |
 | `creationPolicy` _[CreationPolicy](#creationpolicy)_ | CreationPolicy controls whether the role is created or adopted. |  | Enum: [Create Adopt CreateOrAdopt] <br />Optional: \{\} <br /> |
 | `description` _string_ | Description is the role's human-readable description. |  | Optional: \{\} <br /> |
-| `permissions` _[HarborRolePermission](#harborrolepermission) array_ | Permissions lists the role's Harbor API permission rules. |  |  |
+| `permissions` _[HarborRolePermission](#harborrolepermission) array_ | Permissions lists the role's Harbor API permission rules. |  | MinItems: 1 <br /> |
 
 
 #### HarborSpecBase
@@ -818,6 +814,22 @@ PreheatInstance manages a Harbor-global preheat provider instance.
 | `spec` _[PreheatInstanceSpec](#preheatinstancespec)_ |  |  |  |
 
 
+#### PreheatInstanceReference
+
+
+
+PreheatInstanceReference identifies a cluster-scoped PreheatInstance resource.
+
+
+
+_Appears in:_
+- [PreheatPolicySpec](#preheatpolicyspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name of the PreheatInstance resource. |  | MaxLength: 253 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?)*$` <br /> |
+
+
 #### PreheatInstanceSpec
 
 
@@ -838,7 +850,7 @@ _Appears in:_
 | `creationPolicy` _[CreationPolicy](#creationpolicy)_ | CreationPolicy controls whether the instance is created or adopted. |  | Enum: [Create Adopt CreateOrAdopt] <br />Optional: \{\} <br /> |
 | `description` _string_ | Description describes the preheat provider. |  | Optional: \{\} <br /> |
 | `vendor` _string_ | Vendor selects the Harbor preheat driver. |  | MinLength: 1 <br /> |
-| `endpoint` _string_ | Endpoint is the provider service endpoint. |  | Format: url <br /> |
+| `endpoint` _string_ | Endpoint is the provider service endpoint.<br />It must be an absolute HTTP or HTTPS URL without query or fragment components. |  | Format: uri <br />Pattern: `^https?://[^/?#]+(/[^?#]*)?$` <br /> |
 | `authMode` _string_ | AuthMode is the authentication mode understood by the selected provider. | NONE | MinLength: 1 <br /> |
 | `authInfoSecretRef` _[SecretObjectReference](#secretobjectreference)_ | AuthInfoSecretRef references a Secret whose data entries are sent as provider credentials.<br />Cluster-scoped instances must set the Secret namespace explicitly. |  | Optional: \{\} <br /> |
 | `enabled` _boolean_ | Enabled controls whether Harbor uses this instance. |  |  |
@@ -883,7 +895,7 @@ _Appears in:_
 | `reconcileNonce` _string_ | ReconcileNonce forces an immediate reconcile when updated. |  | Optional: \{\} <br /> |
 | `creationPolicy` _[CreationPolicy](#creationpolicy)_ | CreationPolicy controls whether the policy is created or adopted. |  | Enum: [Create Adopt CreateOrAdopt] <br />Optional: \{\} <br /> |
 | `projectRef` _[ProjectReference](#projectreference)_ | ProjectRef identifies the Harbor Project resource this policy belongs to. |  |  |
-| `providerRef` _string_ | ProviderRef identifies the cluster-scoped PreheatInstance used by this policy. |  |  |
+| `providerRef` _[PreheatInstanceReference](#preheatinstancereference)_ | ProviderRef identifies the cluster-scoped PreheatInstance used by this policy. |  |  |
 | `description` _string_ | Description describes the policy. |  | Optional: \{\} <br /> |
 | `filters` _string_ | Filters is the JSON-encoded Harbor preheat filter expression. |  | Optional: \{\} <br /> |
 | `trigger` _string_ | Trigger is the JSON-encoded Harbor preheat trigger configuration. |  | Optional: \{\} <br /> |
@@ -913,7 +925,10 @@ Project is the Schema for the projects API.
 
 
 
-ProjectMetadata defines additional metadata for the project.
+ProjectMetadata defines additional metadata for the project. Nil values leave
+the corresponding Harbor fields unmanaged. Pointers allow explicit empty
+values for fields where Harbor uses an empty string to clear a setting.
+Project visibility is managed through ProjectSpec.Public.
 
 
 
@@ -922,16 +937,20 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `public` _string_ | Public overrides the visibility derived from ProjectSpec.Public.<br />When omitted, it defaults to the string form of ProjectSpec.Public. |  | Optional: \{\} <br /> |
-| `enable_content_trust` _string_ |  |  |  |
-| `enable_content_trust_cosign` _string_ |  |  |  |
-| `prevent_vul` _string_ |  |  |  |
-| `severity` _string_ |  |  |  |
-| `auto_scan` _string_ |  |  |  |
-| `auto_sbom_generation` _string_ |  |  |  |
-| `reuse_sys_cve_allowlist` _string_ |  |  |  |
-| `retention_id` _string_ |  |  |  |
-| `proxy_speed_kb` _string_ |  |  |  |
+| `enable_content_trust` _string_ | EnableContentTrust blocks pulling unsigned images when enabled. |  | Enum: [true false] <br />Optional: \{\} <br /> |
+| `enable_content_trust_cosign` _string_ | EnableContentTrustCosign blocks pulling images without a cosign signature when enabled. |  | Enum: [true false] <br />Optional: \{\} <br /> |
+| `prevent_vul` _string_ | PreventVul blocks vulnerable images from running when enabled. |  | Enum: [true false] <br />Optional: \{\} <br /> |
+| `severity` _string_ | Severity is the minimum severity threshold for blocking vulnerable images. |  | Enum: [none low medium high critical] <br />Optional: \{\} <br /> |
+| `auto_scan` _string_ | AutoScan scans images automatically when they are pushed. |  | Enum: [true false] <br />Optional: \{\} <br /> |
+| `auto_sbom_generation` _string_ | AutoSBOMGeneration generates SBOMs automatically when subject artifacts are pushed. |  | Enum: [true false] <br />Optional: \{\} <br /> |
+| `reuse_sys_cve_allowlist` _string_ | ReuseSysCVEAllowlist makes the project use the system-wide CVE allowlist. |  | Enum: [true false] <br />Optional: \{\} <br /> |
+| `retention_id` _string_ | RetentionID is the Harbor ID of the project's tag retention policy. |  | Optional: \{\} <br /> |
+| `proxy_speed_kb` _string_ | ProxySpeedKB limits proxy-cache bandwidth in kilobits per second. |  | Optional: \{\} <br /> |
+| `max_upstream_conn` _string_ | MaxUpstreamConn is the maximum number of upstream connections per artifact.<br />Use -1 for no limit. |  | Pattern: `^(-1\|[0-9]+)$` <br />Optional: \{\} <br /> |
+| `proxy_cache_local_on_not_found` _string_ | ProxyCacheLocalOnNotFound serves a cached image when it has been removed upstream. |  | Enum: [true false] <br />Optional: \{\} <br /> |
+| `proxy_referrer_api` _string_ | ProxyReferrerAPI enables proxying OCI 1.1 referrer API requests upstream. |  | Enum: [true false] <br />Optional: \{\} <br /> |
+| `proxy_cache_filter_pattern` _string_ | ProxyCacheFilterPattern limits which upstream repositories are proxied.<br />Set an explicit empty value to allow all repositories. |  | Optional: \{\} <br /> |
+| `proxy_cache_filter_kind` _string_ | ProxyCacheFilterKind selects how ProxyCacheFilterPattern is matched. |  | Enum: [doublestar regex] <br />Optional: \{\} <br /> |
 
 
 #### ProjectReference
@@ -954,8 +973,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | Name of the Project resource. |  | MinLength: 1 <br /> |
-| `namespace` _string_ | Namespace of the Project resource. Defaults to the referencing resource namespace. |  | Optional: \{\} <br /> |
+| `name` _string_ | Name of the Project resource. |  | MaxLength: 253 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?)*$` <br /> |
+| `namespace` _string_ | Namespace of the Project resource. Defaults to the referencing resource namespace. |  | MaxLength: 63 <br />Pattern: `^[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?$` <br />Optional: \{\} <br /> |
 
 
 #### ProjectSpec
@@ -979,8 +998,7 @@ _Appears in:_
 | `public` _boolean_ | Public indicates whether the project is public. |  |  |
 | `owner` _string_ | Owner is an optional field for the project owner. |  | Optional: \{\} <br /> |
 | `metadata` _[ProjectMetadata](#projectmetadata)_ | Refer to Kubernetes API documentation for fields of `metadata`. |  | Optional: \{\} <br /> |
-| `cve_allowlist` _[CVEAllowlist](#cveallowlist)_ | CVEAllowlist holds the configuration for the CVE allowlist. |  | Optional: \{\} <br /> |
-| `storage_limit` _integer_ | StorageLimit is the storage limit for the project. |  | Optional: \{\} <br /> |
+| `cveAllowlist` _[CVEAllowlist](#cveallowlist)_ | CVEAllowlist configures the project's CVE allowlist. Omit it to leave the<br />existing allowlist unmanaged; provide an empty items list to clear it. |  | Optional: \{\} <br /> |
 | `registryRef` _[RegistryReference](#registryreference)_ | RegistryRef references the Registry to use for proxy cache projects. |  | Optional: \{\} <br /> |
 
 
@@ -1130,8 +1148,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | Name of the Registry resource. |  | MinLength: 1 <br /> |
-| `namespace` _string_ | Namespace of the Registry resource. Defaults to the referencing resource namespace. |  | Optional: \{\} <br /> |
+| `name` _string_ | Name of the Registry resource. |  | MaxLength: 253 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?)*$` <br /> |
+| `namespace` _string_ | Namespace of the Registry resource. Defaults to the referencing resource namespace. |  | MaxLength: 63 <br />Pattern: `^[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?$` <br />Optional: \{\} <br /> |
 
 
 #### RegistrySpec
@@ -1154,10 +1172,10 @@ _Appears in:_
 | `creationPolicy` _[CreationPolicy](#creationpolicy)_ | CreationPolicy controls whether the operator creates or adopts the Harbor registry.<br />When omitted, the operator's default creation policy is used. |  | Enum: [Create Adopt CreateOrAdopt] <br />Optional: \{\} <br /> |
 | `type` _string_ | Type of the registry, e.g., "github-ghcr". |  | Enum: [github-ghcr ali-acr aws-ecr azure-acr docker-hub docker-registry google-gcr harbor huawei-SWR jfrog-artifactory tencent-tcr volcengine-cr] <br /> |
 | `description` _string_ | Description is an optional description. |  | Optional: \{\} <br /> |
-| `url` _string_ | URL is the registry URL. |  | Format: url <br /> |
+| `url` _string_ | URL is the absolute HTTP or HTTPS URL of the registry endpoint. |  | Format: uri <br />Pattern: `^https?://[^/?#]+(/[^?#]*)?$` <br /> |
 | `credential` _[RegistryCredentialSpec](#registrycredentialspec)_ | Credential holds authentication details for the registry. |  | Optional: \{\} <br /> |
 | `caCertificate` _string_ | CACertificate is the PEM-encoded CA certificate for this registry endpoint. |  | Optional: \{\} <br /> |
-| `caCertificateRef` _[SecretReference](#secretreference)_ | CACertificateRef references a secret value holding the PEM-encoded CA certificate.<br />If set, it overrides CACertificate. |  | Optional: \{\} <br /> |
+| `caCertificateRef` _[SecretReference](#secretreference)_ | CACertificateRef references a secret value holding the PEM-encoded CA certificate.<br />It is mutually exclusive with caCertificate. |  | Optional: \{\} <br /> |
 | `insecure` _boolean_ | Insecure disables TLS certificate verification when Harbor connects to the registry.<br />Defaults to false. Enabling it is insecure; prefer CACertificateRef for private CAs. | false | Optional: \{\} <br /> |
 
 
@@ -1243,7 +1261,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `cron` _string_ | Cron is the cron expression for scheduled triggers. |  | Optional: \{\} <br /> |
+| `cron` _string_ | Cron is the cron expression for scheduled triggers. |  | MinLength: 1 <br />Optional: \{\} <br /> |
 
 
 #### ReplicationTriggerSpec
@@ -1454,7 +1472,7 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `kind` _string_ | Kind defines the permission scope, such as "project" or "system". |  | MinLength: 1 <br /> |
+| `kind` _string_ | Kind defines the permission scope, such as "project" or "system". |  | Enum: [project system] <br /> |
 | `projectRef` _[ProjectReference](#projectreference)_ | ProjectRef references the Project CR for project-scoped permissions.<br />When omitted for kind=project, Harbor's native all-projects scope is used. |  | Optional: \{\} <br /> |
 | `access` _[RobotAccess](#robotaccess) array_ | Access lists the access rules for this permission. |  | MinItems: 1 <br /> |
 
@@ -1662,8 +1680,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | Name of the Secret. |  | MinLength: 1 <br /> |
-| `namespace` _string_ | Namespace of the Secret. When omitted, the controller uses the namespace<br />of the referencing namespaced resource. |  | Optional: \{\} <br /> |
+| `name` _string_ | Name of the Secret. |  | MaxLength: 253 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?)*$` <br /> |
+| `namespace` _string_ | Namespace of the Secret. When omitted, the controller uses the namespace<br />of the referencing namespaced resource. |  | MaxLength: 63 <br />Pattern: `^[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?$` <br />Optional: \{\} <br /> |
 
 
 #### SecretReference
@@ -1683,13 +1701,14 @@ _Appears in:_
 - [RegistrySpec](#registryspec)
 - [RobotSpec](#robotspec)
 - [ScannerRegistrationSpec](#scannerregistrationspec)
+- [UserSpec](#userspec)
 - [WebhookTargetSpec](#webhooktargetspec)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | Name of the Secret. |  | MinLength: 1 <br /> |
+| `name` _string_ | Name of the Secret. |  | MaxLength: 253 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?)*$` <br /> |
 | `key` _string_ | Key inside the Secret data. When omitted, the controller using this<br />reference will apply a sensible default. |  | Optional: \{\} <br /> |
-| `namespace` _string_ | Namespace of the Secret. When omitted, the controller uses the namespace of<br />the referencing namespaced resource. References from cluster-scoped resources<br />must set this field explicitly because they have no namespace. |  | Optional: \{\} <br /> |
+| `namespace` _string_ | Namespace of the Secret. When omitted, the controller uses the namespace of<br />the referencing namespaced resource. References from cluster-scoped resources<br />must set this field explicitly because they have no namespace. |  | MaxLength: 63 <br />Pattern: `^[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?$` <br />Optional: \{\} <br /> |
 
 
 #### User
@@ -1741,8 +1760,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | Name of the UserGroupClaim resource. |  | MinLength: 1 <br /> |
-| `namespace` _string_ | Namespace of the UserGroupClaim resource. Defaults to the referencing resource namespace. |  | Optional: \{\} <br /> |
+| `name` _string_ | Name of the UserGroupClaim resource. |  | MaxLength: 253 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?)*$` <br /> |
+| `namespace` _string_ | Namespace of the UserGroupClaim resource. Defaults to the referencing resource namespace. |  | MaxLength: 63 <br />Pattern: `^[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?$` <br />Optional: \{\} <br /> |
 
 
 #### UserGroupClaimSpec
@@ -1782,8 +1801,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `name` _string_ | Name of the User resource. |  | MinLength: 1 <br /> |
-| `namespace` _string_ | Namespace of the User resource. Defaults to the referencing resource namespace. |  | Optional: \{\} <br /> |
+| `name` _string_ | Name of the User resource. |  | MaxLength: 253 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?)*$` <br /> |
+| `namespace` _string_ | Namespace of the User resource. Defaults to the referencing resource namespace. |  | MaxLength: 63 <br />Pattern: `^[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?$` <br />Optional: \{\} <br /> |
 
 
 #### UserSpec
@@ -1807,7 +1826,7 @@ _Appears in:_
 | `email` _string_ | Email address of the user. |  | Format: email <br /> |
 | `realname` _string_ | Realname is an optional full name. Defaults to metadata.name. |  | Optional: \{\} <br /> |
 | `comment` _string_ | Comment is an optional comment for the user. |  | Optional: \{\} <br /> |
-| `passwordSecretRef` _[SecretKeySelector](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.36/#secretkeyselector-v1-core)_ | PasswordSecretRef references the required secret key containing the user's password. |  |  |
+| `passwordSecretRef` _[SecretReference](#secretreference)_ | PasswordSecretRef references the Secret and required key containing the user's password. |  |  |
 
 
 #### WebhookPolicy
@@ -1866,8 +1885,8 @@ _Appears in:_
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
-| `type` _string_ | Type defines the webhook notify type. |  | Optional: \{\} <br /> |
-| `address` _string_ | Address is the webhook target address. |  | Optional: \{\} <br /> |
+| `type` _string_ | Type defines the webhook notify type.<br />Harbor validates this value against the configured notification driver. |  | MinLength: 1 <br /> |
+| `address` _string_ | Address is the webhook target address.<br />Query parameters are allowed; fragments are not sent as part of HTTP requests. |  | Format: uri <br />Pattern: `^https?://[^/?#@]+([^#]*)?$` <br /> |
 | `authHeader` _string_ | AuthHeader is the auth header to send to the webhook target. |  | Optional: \{\} <br /> |
 | `authHeaderSecretRef` _[SecretReference](#secretreference)_ | AuthHeaderSecretRef references a secret value holding the auth header. |  | Optional: \{\} <br /> |
 | `payloadFormat` _string_ | PayloadFormat is the payload format (e.g. CloudEvents). |  | Optional: \{\} <br /> |

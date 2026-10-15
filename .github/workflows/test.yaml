@@ -26,6 +26,6 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Running Tests
+      - name: Running unit and Kubernetes API contract tests
         run: |
           make test

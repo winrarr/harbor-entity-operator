@@ -26,6 +26,13 @@ spec:
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: Ready
       type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].reason
+      name: Reason
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].message
+      name: Message
+      priority: 1
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -62,12 +69,16 @@ spec:
                 properties:
                   name:
                     description: Name of the Secret.
+                    maxLength: 253
                     minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                     type: string
                   namespace:
                     description: |-
                       Namespace of the Secret. When omitted, the controller uses the namespace
                       of the referencing namespaced resource.
+                    maxLength: 63
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$
                     type: string
                 required:
                 - name
@@ -114,8 +125,11 @@ spec:
                 description: Enabled controls whether Harbor uses this instance.
                 type: boolean
               endpoint:
-                description: Endpoint is the provider service endpoint.
-                format: url
+                description: |-
+                  Endpoint is the provider service endpoint.
+                  It must be an absolute HTTP or HTTPS URL without query or fragment components.
+                format: uri
+                pattern: ^https?://[^/?#]+(/[^?#]*)?$
                 type: string
               harborConnectionRef:
                 description: |-
@@ -133,6 +147,9 @@ spec:
                     type: string
                   name:
                     description: Name of the referenced Harbor connection object.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                     type: string
                 required:
                 - name
@@ -161,6 +178,12 @@ spec:
                 == ''ClusterHarborConnection'''
             - message: authInfoSecretRef is required when authMode is not NONE
               rule: self.authMode == 'NONE' || has(self.authInfoSecretRef)
+            - message: authInfoSecretRef.namespace is required for a cluster-scoped
+                PreheatInstance
+              rule: '!has(self.authInfoSecretRef) || size(self.authInfoSecretRef.namespace)
+                > 0'
+            - message: driftDetectionInterval must not be negative
+              rule: '!has(self.driftDetectionInterval) || !self.driftDetectionInterval.startsWith(''-'')'
           status:
             description: PreheatInstanceStatus records the Harbor identity of the
               provider instance.

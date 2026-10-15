@@ -110,6 +110,9 @@ spec:
                     type: string
                   name:
                     description: Name of the referenced Harbor connection object.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                     type: string
                 required:
                 - name
@@ -120,11 +123,15 @@ spec:
                 properties:
                   name:
                     description: Name of the Project resource.
+                    maxLength: 253
                     minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                     type: string
                   namespace:
                     description: Namespace of the Project resource. Defaults to the
                       referencing resource namespace.
+                    maxLength: 63
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$
                     type: string
                 required:
                 - name
@@ -149,6 +156,8 @@ spec:
             - message: projectRef is immutable; delete and recreate the Label
               rule: '!has(oldSelf.projectRef) || (has(self.projectRef) && self.projectRef
                 == oldSelf.projectRef)'
+            - message: driftDetectionInterval must not be negative
+              rule: '!has(self.driftDetectionInterval) || !self.driftDetectionInterval.startsWith(''-'')'
           status:
             description: LabelStatus defines the observed state of Label.
             properties:

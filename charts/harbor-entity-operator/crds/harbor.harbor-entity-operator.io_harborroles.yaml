@@ -23,6 +23,13 @@ spec:
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: Ready
       type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].reason
+      name: Reason
+      type: string
+    - jsonPath: .status.conditions[?(@.type=="Ready")].message
+      name: Message
+      priority: 1
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -97,6 +104,9 @@ spec:
                     type: string
                   name:
                     description: Name of the referenced Harbor connection object.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                     type: string
                 required:
                 - name
@@ -116,21 +126,26 @@ spec:
                           action:
                             description: Action is the Harbor action name, such as
                               pull, push, read, or delete.
+                            minLength: 1
                             type: string
                           effect:
                             description: Effect is the permission effect.
+                            minLength: 1
                             type: string
                           resource:
                             description: Resource is the Harbor resource name.
+                            minLength: 1
                             type: string
                         required:
                         - action
                         - effect
                         - resource
                         type: object
+                      minItems: 1
                       type: array
                     kind:
                       description: Kind is the Harbor permission category.
+                      minLength: 1
                       type: string
                     namespace:
                       description: Namespace scopes the permission to a Harbor resource
@@ -140,6 +155,7 @@ spec:
                   - access
                   - kind
                   type: object
+                minItems: 1
                 type: array
               reconcileNonce:
                 description: ReconcileNonce forces an immediate reconcile when updated.
@@ -152,6 +168,8 @@ spec:
                 reference
               rule: '!has(self.harborConnectionRef) || self.harborConnectionRef.kind
                 == ''ClusterHarborConnection'''
+            - message: driftDetectionInterval must not be negative
+              rule: '!has(self.driftDetectionInterval) || !self.driftDetectionInterval.startsWith(''-'')'
           status:
             description: HarborRoleStatus records the Harbor identity of a custom
               role.

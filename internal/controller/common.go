@@ -18,6 +18,7 @@ import (
 	"github.com/go-logr/logr"
 	harborv1alpha1 "github.com/winrarr/harbor-entity-operator/api/v1alpha1"
 	"github.com/winrarr/harbor-entity-operator/internal/harborclient"
+	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -178,6 +179,73 @@ func setupHarborBackedController(
 			}),
 		).
 		Named(name), nil
+}
+
+func watchSecretReferences(
+	builder *builder.TypedBuilder[reconcile.Request],
+	c client.Client,
+	newList func() client.ObjectList,
+	referencesFor func(client.Object) []harborv1alpha1.SecretReference,
+) *builder.TypedBuilder[reconcile.Request] {
+	return builder.Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, secret client.Object) []reconcile.Request {
+		return requestsForSecretReferences(ctx, c, newList, referencesFor, secret)
+	}))
+}
+
+func requestsForSecretReferences(
+	ctx context.Context,
+	c client.Client,
+	newList func() client.ObjectList,
+	referencesFor func(client.Object) []harborv1alpha1.SecretReference,
+	secret client.Object,
+) []reconcile.Request {
+	list := newList()
+	if err := c.List(ctx, list); err != nil {
+		return nil
+	}
+	items, err := apimeta.ExtractList(list)
+	if err != nil {
+		return nil
+	}
+
+	requests := make([]reconcile.Request, 0)
+	for _, item := range items {
+		resource, ok := item.(client.Object)
+		if !ok {
+			continue
+		}
+		for _, ref := range referencesFor(resource) {
+			if ref.Name == "" {
+				continue
+			}
+			namespace := ref.Namespace
+			if namespace == "" {
+				namespace = resource.GetNamespace()
+			}
+			if namespace == secret.GetNamespace() && ref.Name == secret.GetName() {
+				requests = append(requests, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(resource)})
+				break
+			}
+		}
+	}
+	return requests
+}
+
+func harborConnectionSecretReferences(spec harborv1alpha1.HarborConnectionSpec) []harborv1alpha1.SecretReference {
+	references := make([]harborv1alpha1.SecretReference, 0, 3)
+	if spec.CABundleSecretRef != nil {
+		references = append(references, *spec.CABundleSecretRef)
+	}
+	if spec.Credentials == nil {
+		return references
+	}
+	if spec.Credentials.UsernameSecretRef != nil {
+		references = append(references, *spec.Credentials.UsernameSecretRef)
+	}
+	if spec.Credentials.PasswordSecretRef.Name != "" {
+		references = append(references, spec.Credentials.PasswordSecretRef)
+	}
+	return references
 }
 
 func requestsForIndexedObjects(

@@ -7,7 +7,9 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // +kubebuilder:validation:XValidation:rule="self.baseURL == oldSelf.baseURL",message="baseURL is immutable"
 type HarborConnectionSpec struct {
 	// BaseURL is the Harbor API endpoint.
-	// +kubebuilder:validation:Format=url
+	// It must be an absolute HTTP or HTTPS URL without query or fragment components.
+	// +kubebuilder:validation:Format=uri
+	// +kubebuilder:validation:Pattern=`^https?://[^/?#]+(/[^?#]*)?$`
 	BaseURL string `json:"baseURL"`
 
 	// Credentials holds the default credentials for Harbor API calls.
@@ -98,6 +100,7 @@ func init() {
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // ClusterHarborConnection is the Schema for the clusterharborconnections API.
+// +kubebuilder:validation:XValidation:rule="(!has(self.spec.credentials) || (size(self.spec.credentials.passwordSecretRef.namespace) > 0 && (!has(self.spec.credentials.usernameSecretRef) || size(self.spec.credentials.usernameSecretRef.namespace) > 0))) && (!has(self.spec.caBundleSecretRef) || size(self.spec.caBundleSecretRef.namespace) > 0)",message="Secret references on ClusterHarborConnection must set namespace"
 type ClusterHarborConnection struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

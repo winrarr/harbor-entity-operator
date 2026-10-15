@@ -2,10 +2,11 @@ package controller
 
 import (
 	"context"
+	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -99,6 +100,50 @@ var _ = Describe("CRD validation and defaulting", func() {
 		Expect(insecure).To(BeFalse())
 	})
 
+	It("rejects changes to a HarborConnection baseURL", func() {
+		connection := &harborv1alpha1.HarborConnection{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: testNamespace,
+				Name:      "immutable-connection-base-url",
+			},
+			Spec: harborv1alpha1.HarborConnectionSpec{
+				BaseURL: "https://harbor.example.com",
+				Credentials: &harborv1alpha1.Credentials{
+					Username: "admin",
+					PasswordSecretRef: harborv1alpha1.SecretReference{
+						Name: "harbor-password",
+						Key:  "password",
+					},
+				},
+			},
+		}
+
+		Expect(k8sClient.Create(ctx, connection)).To(Succeed())
+		DeferCleanup(func() { _ = k8sClient.Delete(ctx, connection) })
+
+		connection.Spec.BaseURL = "https://other-harbor.example.com"
+		err := k8sClient.Update(ctx, connection)
+		Expect(err).To(HaveOccurred())
+		Expect(apierrors.IsInvalid(err)).To(BeTrue(), err.Error())
+		Expect(err.Error()).To(ContainSubstring("baseURL is immutable"))
+	})
+
+	It("rejects changes to a HarborUserGroup groupType", func() {
+		group := &harborv1alpha1.HarborUserGroup{
+			ObjectMeta: metav1.ObjectMeta{Name: "immutable-group-type"},
+			Spec:       harborv1alpha1.HarborUserGroupSpec{GroupType: 2},
+		}
+
+		Expect(k8sClient.Create(ctx, group)).To(Succeed())
+		DeferCleanup(func() { _ = k8sClient.Delete(ctx, group) })
+
+		group.Spec.GroupType = 3
+		err := k8sClient.Update(ctx, group)
+		Expect(err).To(HaveOccurred())
+		Expect(apierrors.IsInvalid(err)).To(BeTrue(), err.Error())
+		Expect(err.Error()).To(ContainSubstring("groupType is immutable"))
+	})
+
 	It("rejects unsupported creation policies", func() {
 		expectInvalid(&harborv1alpha1.Project{
 			ObjectMeta: metav1.ObjectMeta{
@@ -110,6 +155,97 @@ var _ = Describe("CRD validation and defaulting", func() {
 					HarborConnectionRef: &harborv1alpha1.HarborConnectionReference{Name: "conn"},
 				},
 				CreationPolicy: "Replace",
+			},
+		})
+	})
+
+	It("rejects invalid DNS labels in object references", func() {
+		tooLongName := strings.Repeat("a", 64)
+		expectInvalid(&harborv1alpha1.Project{
+			ObjectMeta: metav1.ObjectMeta{Namespace: testNamespace, Name: "invalid-reference-dns-label"},
+			Spec: harborv1alpha1.ProjectSpec{
+				HarborSpecBase: harborv1alpha1.HarborSpecBase{
+					HarborConnectionRef: &harborv1alpha1.HarborConnectionReference{Name: tooLongName},
+				},
+			},
+		})
+	})
+
+	It("accepts Harbor boolean metadata as string values", func() {
+		for _, value := range []string{"true", "false"} {
+			project := &harborv1alpha1.Project{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: testNamespace,
+					Name:      "boolean-metadata-" + value,
+				},
+				Spec: harborv1alpha1.ProjectSpec{
+					HarborSpecBase: harborv1alpha1.HarborSpecBase{
+						HarborConnectionRef: &harborv1alpha1.HarborConnectionReference{Name: "conn"},
+					},
+					Metadata: &harborv1alpha1.ProjectMetadata{
+						EnableContentTrust:        &value,
+						EnableContentTrustCosign:  &value,
+						PreventVul:                &value,
+						AutoScan:                  &value,
+						AutoSBOMGeneration:        &value,
+						ReuseSysCVEAllowlist:      &value,
+						ProxyCacheLocalOnNotFound: &value,
+						ProxyReferrerAPI:          &value,
+					},
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, project)).To(Succeed())
+			DeferCleanup(func() { _ = k8sClient.Delete(ctx, project) })
+		}
+	})
+
+	It("accepts zero drift intervals and rejects negative intervals", func() {
+		zero := metav1.Duration{}
+		project := &harborv1alpha1.Project{
+			ObjectMeta: metav1.ObjectMeta{Namespace: testNamespace, Name: "zero-drift-interval"},
+			Spec: harborv1alpha1.ProjectSpec{
+				HarborSpecBase: harborv1alpha1.HarborSpecBase{
+					HarborConnectionRef:    &harborv1alpha1.HarborConnectionReference{Name: "conn"},
+					DriftDetectionInterval: &zero,
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, project)).To(Succeed())
+		DeferCleanup(func() { _ = k8sClient.Delete(ctx, project) })
+
+		negative := metav1.Duration{Duration: -time.Second}
+		expectInvalid(&harborv1alpha1.Project{
+			ObjectMeta: metav1.ObjectMeta{Namespace: testNamespace, Name: "negative-drift-interval"},
+			Spec: harborv1alpha1.ProjectSpec{
+				HarborSpecBase: harborv1alpha1.HarborSpecBase{
+					HarborConnectionRef:    &harborv1alpha1.HarborConnectionReference{Name: "conn"},
+					DriftDetectionInterval: &negative,
+				},
+			},
+		})
+	})
+
+	It("rejects Harbor endpoints that are not HTTP or HTTPS URLs", func() {
+		expectInvalid(&harborv1alpha1.HarborConnection{
+			ObjectMeta: metav1.ObjectMeta{Namespace: testNamespace, Name: "invalid-harbor-url"},
+			Spec:       harborv1alpha1.HarborConnectionSpec{BaseURL: "ftp://harbor.example.com"},
+		})
+		expectInvalid(&harborv1alpha1.Registry{
+			ObjectMeta: metav1.ObjectMeta{Namespace: testNamespace, Name: "invalid-registry-url"},
+			Spec: harborv1alpha1.RegistrySpec{
+				HarborSpecBase: harborv1alpha1.HarborSpecBase{HarborConnectionRef: &harborv1alpha1.HarborConnectionReference{Name: "conn"}},
+				Type:           "docker-registry",
+				URL:            "ftp://registry.example.com",
+			},
+		})
+		expectInvalid(&harborv1alpha1.PreheatInstance{
+			ObjectMeta: metav1.ObjectMeta{Name: "invalid-preheat-endpoint"},
+			Spec: harborv1alpha1.PreheatInstanceSpec{
+				Vendor:   "dragonfly",
+				Endpoint: "ftp://preheat.example.com",
+				AuthMode: "NONE",
+				Enabled:  true,
 			},
 		})
 	})
@@ -137,10 +273,22 @@ var _ = Describe("CRD validation and defaulting", func() {
 				HarborSpecBase: harborv1alpha1.HarborSpecBase{
 					HarborConnectionRef: &harborv1alpha1.HarborConnectionReference{Name: "conn"},
 				},
-				Email: "user@example.com",
-				PasswordSecretRef: corev1.SecretKeySelector{
-					Key: "password",
+				Email:             "user@example.com",
+				PasswordSecretRef: harborv1alpha1.SecretReference{Key: "password"},
+			},
+		})
+
+		expectInvalid(&harborv1alpha1.User{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: testNamespace,
+				Name:      "empty-user-password-secret-key",
+			},
+			Spec: harborv1alpha1.UserSpec{
+				HarborSpecBase: harborv1alpha1.HarborSpecBase{
+					HarborConnectionRef: &harborv1alpha1.HarborConnectionReference{Name: "conn"},
 				},
+				Email:             "user@example.com",
+				PasswordSecretRef: harborv1alpha1.SecretReference{Name: "user-password"},
 			},
 		})
 	})
@@ -161,6 +309,34 @@ var _ = Describe("CRD validation and defaulting", func() {
 						},
 					},
 				},
+			},
+		})
+	})
+
+	It("rejects project references on system-scoped robot permissions", func() {
+		expectInvalid(&harborv1alpha1.Robot{
+			ObjectMeta: metav1.ObjectMeta{Namespace: testNamespace, Name: "invalid-system-project-permission"},
+			Spec: harborv1alpha1.RobotSpec{
+				Level:              "system",
+				ImagePullSecretRef: &harborv1alpha1.SecretObjectReference{Name: "robot-output"},
+				Permissions: []harborv1alpha1.RobotPermission{{
+					Kind:       "system",
+					ProjectRef: &harborv1alpha1.ProjectReference{Name: "project"},
+					Access:     []harborv1alpha1.RobotAccess{{Resource: harborv1alpha1.RobotResourceAll, Action: harborv1alpha1.RobotActionAll}},
+				}},
+			},
+		})
+	})
+
+	It("requires an LDAP group DN for UserGroupClaim resources", func() {
+		expectInvalid(&harborv1alpha1.UserGroupClaim{
+			ObjectMeta: metav1.ObjectMeta{Namespace: testNamespace, Name: "ldap-claim-without-dn"},
+			Spec: harborv1alpha1.UserGroupClaimSpec{
+				HarborClaimSpecBase: harborv1alpha1.HarborClaimSpecBase{
+					HarborConnectionRef: &harborv1alpha1.HarborConnectionReference{Name: "conn"},
+				},
+				GroupName: "Engineering",
+				GroupType: 1,
 			},
 		})
 	})
@@ -222,7 +398,7 @@ var _ = Describe("CRD validation and defaulting", func() {
 				ProjectRef: &harborv1alpha1.ProjectReference{Name: "library"},
 				EventTypes: []string{"PUSH_ARTIFACT"},
 				Targets: []harborv1alpha1.WebhookTargetSpec{
-					{Type: "http", Address: "https://example.invalid/hook"},
+					{Type: "http", Address: "https://example.invalid/hook?channel=security"},
 				},
 			},
 		}
@@ -375,6 +551,18 @@ var _ = Describe("CRD validation and defaulting", func() {
 		})
 	})
 
+	It("rejects webhook targets with an invalid address", func() {
+		expectInvalid(&harborv1alpha1.WebhookPolicy{
+			ObjectMeta: metav1.ObjectMeta{Namespace: testNamespace, Name: "invalid-webhook-target-address"},
+			Spec: harborv1alpha1.WebhookPolicySpec{
+				HarborSpecBase: harborv1alpha1.HarborSpecBase{HarborConnectionRef: &harborv1alpha1.HarborConnectionReference{Name: "conn"}},
+				ProjectRef:     &harborv1alpha1.ProjectReference{Name: "project"},
+				EventTypes:     []string{"PUSH_ARTIFACT"},
+				Targets:        []harborv1alpha1.WebhookTargetSpec{{Type: "http", Address: "mailto:hook@example.com"}},
+			},
+		})
+	})
+
 	It("rejects registries with both caCertificate and caCertificateRef", func() {
 		expectInvalid(&harborv1alpha1.Registry{
 			ObjectMeta: metav1.ObjectMeta{
@@ -423,8 +611,18 @@ var _ = Describe("CRD validation and defaulting", func() {
 				DestinationRegistryRef: &harborv1alpha1.RegistryReference{Name: "dest"},
 				Trigger: &harborv1alpha1.ReplicationTriggerSpec{
 					Type:     "scheduled",
-					Settings: &harborv1alpha1.ReplicationTriggerSettings{},
+					Settings: &harborv1alpha1.ReplicationTriggerSettings{Cron: ""},
 				},
+			},
+		})
+	})
+
+	It("requires CVE allowlist items when the project allowlist is set", func() {
+		expectInvalid(&harborv1alpha1.Project{
+			ObjectMeta: metav1.ObjectMeta{Namespace: testNamespace, Name: "cve-allowlist-without-items"},
+			Spec: harborv1alpha1.ProjectSpec{
+				HarborSpecBase: harborv1alpha1.HarborSpecBase{HarborConnectionRef: &harborv1alpha1.HarborConnectionReference{Name: "conn"}},
+				CVEAllowlist:   &harborv1alpha1.CVEAllowlist{},
 			},
 		})
 	})

@@ -19,7 +19,7 @@ spec:
 
   creationPolicy: Create
 
-  # Make project public? (Harbor uses "public" metadata under the hood.)
+  # Make project public?
   public: false
 
   # Enable security scanning and related metadata settings.
@@ -27,6 +27,12 @@ spec:
     auto_scan: "true"
     severity: high
     prevent_vul: "true"
+
+  # An omitted CVE allowlist leaves Harbor's current allowlist unmanaged.
+  # An empty items list clears it.
+  cveAllowlist:
+    items:
+      - cveID: CVE-2024-12345
 
   # Optional: drift detection for the project configuration.
   driftDetectionInterval: 5m
@@ -64,10 +70,20 @@ spec:
 
   - automatic scanning of images,
   - vulnerability blocking behavior,
-  - minimum severity threshold, etc.
+  - minimum severity threshold, and
+  - proxy-cache limits and repository filters.
 
-  When `metadata.public` is omitted, it defaults to the string form of
-  `spec.public`.
+  Omitted metadata properties are unmanaged. Use an explicit empty string to
+  clear a Harbor string property when that property accepts empty values.
+
+- **spec.cveAllowlist** (object, optional)
+  Controls the project's CVE allowlist. Omit it to leave the existing allowlist
+  unmanaged. Set `items: []` to clear the list. `expiresAt`, when supplied, is
+  seconds since the Unix epoch.
+
+- **Storage quota**
+  Storage limits are managed separately with a [Quota](quota.md) resource so
+  limits remain readable and drift-correctable after project creation.
 
 - **spec.registryRef** (object, optional, immutable)
   References the `Registry` used to create a Harbor proxy-cache project. The referenced resource must exist and have a Harbor registry ID before the Project can be created. Harbor cannot convert an existing project to or from a proxy-cache project, so this reference cannot be added, removed, or changed after creation. Recreate the Project to select a different proxy-cache mode or registry.
@@ -90,6 +106,7 @@ generated [`HarborSpecBase` reference](../reference/api.md#harborspecbase).
 
   - Ensures the project exists in Harbor.
   - Updates metadata to match your spec.
+  - Updates CVE allowlist state only when `cveAllowlist` is present.
   - Creates a proxy-cache project when `registryRef` is set at creation time.
   - Applies `creationPolicy` when the project is not yet recorded in status.
 

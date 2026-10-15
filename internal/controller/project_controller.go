@@ -3,8 +3,8 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
-	"time"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -189,42 +189,33 @@ func (r *ProjectReconciler) buildCreateReq(ctx context.Context, cr *harborv1alph
 	var meta harborclient.ProjectMetadata
 	if m := cr.Spec.Metadata; m != nil {
 		meta = harborclient.ProjectMetadata{
-			Public:                   m.Public,
-			EnableContentTrust:       m.EnableContentTrust,
-			EnableContentTrustCosign: m.EnableContentTrustCosign,
-			PreventVul:               m.PreventVul,
-			Severity:                 m.Severity,
-			AutoScan:                 m.AutoScan,
-			AutoSBOMGeneration:       m.AutoSBOMGeneration,
-			ReuseSysCVEAllowlist:     m.ReuseSysCVEAllowlist,
-			RetentionID:              m.RetentionID,
-			ProxySpeedKB:             m.ProxySpeedKB,
+			EnableContentTrust:        m.EnableContentTrust,
+			EnableContentTrustCosign:  m.EnableContentTrustCosign,
+			PreventVul:                m.PreventVul,
+			Severity:                  m.Severity,
+			AutoScan:                  m.AutoScan,
+			AutoSBOMGeneration:        m.AutoSBOMGeneration,
+			ReuseSysCVEAllowlist:      m.ReuseSysCVEAllowlist,
+			RetentionID:               m.RetentionID,
+			ProxySpeedKB:              m.ProxySpeedKB,
+			MaxUpstreamConn:           m.MaxUpstreamConn,
+			ProxyCacheLocalOnNotFound: m.ProxyCacheLocalOnNotFound,
+			ProxyReferrerAPI:          m.ProxyReferrerAPI,
+			ProxyCacheFilterPattern:   m.ProxyCacheFilterPattern,
+			ProxyCacheFilterKind:      m.ProxyCacheFilterKind,
 		}
 	}
-	if meta.Public == "" {
-		if cr.Spec.Public {
-			meta.Public = "true"
-		} else {
-			meta.Public = "false"
-		}
-	}
+	meta.Public = strconv.FormatBool(cr.Spec.Public)
 
-	var allow harborclient.CVEAllowlist
+	var allow *harborclient.CVEAllowlist
 	if a := cr.Spec.CVEAllowlist; a != nil {
-		allow.ID = a.ID
-		allow.ProjectID = a.ProjectID
-		allow.ExpiresAt = a.ExpiresAt
-		allow.CreationTime = a.CreationTime.UTC().Format(time.RFC3339)
-		allow.UpdateTime = a.UpdateTime.UTC().Format(time.RFC3339)
-		allow.Items = make([]harborclient.CVEAllowlistItem, len(a.Items))
+		allow = &harborclient.CVEAllowlist{Items: make([]harborclient.CVEAllowlistItem, len(a.Items))}
+		if a.ExpiresAt != nil {
+			allow.ExpiresAt = a.ExpiresAt
+		}
 		for i, item := range a.Items {
 			allow.Items[i].CveID = item.CveID
 		}
-	}
-
-	var storageLimit *int
-	if cr.Spec.StorageLimit != 0 {
-		storageLimit = &cr.Spec.StorageLimit
 	}
 
 	var registryID *int
@@ -242,7 +233,6 @@ func (r *ProjectReconciler) buildCreateReq(ctx context.Context, cr *harborv1alph
 		Owner:        cr.Spec.Owner,
 		Metadata:     meta,
 		CVEAllowlist: allow,
-		StorageLimit: storageLimit,
 		RegistryID:   registryID,
 	}, nil
 }
@@ -254,15 +244,11 @@ func projectNeedsUpdate(desired harborclient.CreateProjectRequest,
 		return true
 	}
 
-	wantPub := "false"
-	if desired.Public {
-		wantPub = "true"
-	}
-	if wantPub != current.Metadata.Public {
+	if desired.Metadata.Public != current.Metadata.Public {
 		return true
 	}
 
-	if !strings.EqualFold(desired.Owner, current.OwnerName) {
+	if desired.Owner != "" && !strings.EqualFold(desired.Owner, current.OwnerName) {
 		return true
 	}
 
@@ -276,32 +262,52 @@ func projectNeedsUpdate(desired harborclient.CreateProjectRequest,
 	mw := desired.Metadata
 	mc := current.Metadata
 	switch {
-	case mw.EnableContentTrust != mc.EnableContentTrust,
-		mw.EnableContentTrustCosign != mc.EnableContentTrustCosign,
-		mw.PreventVul != mc.PreventVul,
-		mw.Severity != mc.Severity,
-		mw.AutoScan != mc.AutoScan,
-		mw.AutoSBOMGeneration != mc.AutoSBOMGeneration,
-		mw.ReuseSysCVEAllowlist != mc.ReuseSysCVEAllowlist,
-		mw.RetentionID != mc.RetentionID,
-		mw.ProxySpeedKB != mc.ProxySpeedKB:
+	case projectMetadataFieldChanged(mw.EnableContentTrust, mc.EnableContentTrust),
+		projectMetadataFieldChanged(mw.EnableContentTrustCosign, mc.EnableContentTrustCosign),
+		projectMetadataFieldChanged(mw.PreventVul, mc.PreventVul),
+		projectMetadataFieldChanged(mw.Severity, mc.Severity),
+		projectMetadataFieldChanged(mw.AutoScan, mc.AutoScan),
+		projectMetadataFieldChanged(mw.AutoSBOMGeneration, mc.AutoSBOMGeneration),
+		projectMetadataFieldChanged(mw.ReuseSysCVEAllowlist, mc.ReuseSysCVEAllowlist),
+		projectMetadataFieldChanged(mw.RetentionID, mc.RetentionID),
+		projectMetadataFieldChanged(mw.ProxySpeedKB, mc.ProxySpeedKB),
+		projectMetadataFieldChanged(mw.MaxUpstreamConn, mc.MaxUpstreamConn),
+		projectMetadataFieldChanged(mw.ProxyCacheLocalOnNotFound, mc.ProxyCacheLocalOnNotFound),
+		projectMetadataFieldChanged(mw.ProxyReferrerAPI, mc.ProxyReferrerAPI),
+		projectMetadataFieldChanged(mw.ProxyCacheFilterPattern, mc.ProxyCacheFilterPattern),
+		projectMetadataFieldChanged(mw.ProxyCacheFilterKind, mc.ProxyCacheFilterKind):
 		return true
 	}
 
-	aw := desired.CVEAllowlist
-	ac := current.CVEAllowlist
-	if aw.ID != ac.ID ||
-		aw.ProjectID != ac.ProjectID ||
-		aw.ExpiresAt != ac.ExpiresAt ||
-		len(aw.Items) != len(ac.Items) {
-		return true
-	}
-	for i := range aw.Items {
-		if aw.Items[i].CveID != ac.Items[i].CveID {
+	if aw := desired.CVEAllowlist; aw != nil {
+		ac := current.CVEAllowlist
+		if optionalInt64Value(aw.ExpiresAt) != optionalInt64Value(ac.ExpiresAt) || len(aw.Items) != len(ac.Items) {
 			return true
+		}
+		for i := range aw.Items {
+			if aw.Items[i].CveID != ac.Items[i].CveID {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+func projectMetadataFieldChanged(desired, current *string) bool {
+	if desired == nil {
+		return false
+	}
+	if current == nil {
+		return *desired != ""
+	}
+	return *desired != *current
+}
+
+func optionalInt64Value(value *int64) int64 {
+	if value == nil {
+		return 0
+	}
+	return *value
 }
 
 func (r *ProjectReconciler) SetupWithManager(mgr ctrl.Manager) error {

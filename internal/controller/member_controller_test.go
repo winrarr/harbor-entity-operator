@@ -102,12 +102,9 @@ var _ = Describe("Member Controller", func() {
 			user := &harborv1alpha1.User{
 				ObjectMeta: metav1.ObjectMeta{Name: "alice", Namespace: "default"},
 				Spec: harborv1alpha1.UserSpec{
-					HarborSpecBase: harborv1alpha1.HarborSpecBase{HarborConnectionRef: &harborv1alpha1.HarborConnectionReference{Name: connName}},
-					Email:          "alice@example.com",
-					PasswordSecretRef: corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{Name: "alice-password"},
-						Key:                  "password",
-					},
+					HarborSpecBase:    harborv1alpha1.HarborSpecBase{HarborConnectionRef: &harborv1alpha1.HarborConnectionReference{Name: connName}},
+					Email:             "alice@example.com",
+					PasswordSecretRef: harborv1alpha1.SecretReference{Name: "alice-password", Key: "password"},
 				},
 			}
 			Expect(k8sClient.Create(ctx, user)).To(Succeed())
@@ -292,12 +289,9 @@ var _ = Describe("Member Controller", func() {
 			user := &harborv1alpha1.User{
 				ObjectMeta: metav1.ObjectMeta{Name: "alice", Namespace: "default"},
 				Spec: harborv1alpha1.UserSpec{
-					HarborSpecBase: harborv1alpha1.HarborSpecBase{HarborConnectionRef: &harborv1alpha1.HarborConnectionReference{Name: connName}},
-					Email:          "alice@example.com",
-					PasswordSecretRef: corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{Name: "alice-password"},
-						Key:                  "password",
-					},
+					HarborSpecBase:    harborv1alpha1.HarborSpecBase{HarborConnectionRef: &harborv1alpha1.HarborConnectionReference{Name: connName}},
+					Email:             "alice@example.com",
+					PasswordSecretRef: harborv1alpha1.SecretReference{Name: "alice-password", Key: "password"},
 				},
 			}
 			Expect(k8sClient.Create(ctx, user)).To(Succeed())

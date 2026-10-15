@@ -62,6 +62,9 @@ func (policy CreationPolicy) AllowsAdoption() bool {
 // cluster-scoped ClusterHarborConnection.
 type HarborConnectionReference struct {
 	// Name of the referenced Harbor connection object.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$`
 	Name string `json:"name"`
 
 	// Kind selects the Harbor connection object kind.
@@ -77,6 +80,7 @@ func (r HarborConnectionReference) IsZero() bool {
 }
 
 // HarborSpecBase holds the fields that appear in every Harbor CR.
+// +kubebuilder:validation:XValidation:rule="!has(self.driftDetectionInterval) || !self.driftDetectionInterval.startsWith('-')",message="driftDetectionInterval must not be negative"
 type HarborSpecBase struct {
 	// HarborConnectionRef references the Harbor connection object to use.
 	// When the operator is started with --harbor-connection, this field may be omitted.
@@ -107,6 +111,7 @@ type HarborSpecBase struct {
 // HarborClaimSpecBase is the common spec for non-owning claims of Harbor
 // global identities. Claims select a connection and drift interval, but never
 // delete the global Harbor object when the claim is deleted.
+// +kubebuilder:validation:XValidation:rule="!has(self.driftDetectionInterval) || !self.driftDetectionInterval.startsWith('-')",message="driftDetectionInterval must not be negative"
 type HarborClaimSpecBase struct {
 	// HarborConnectionRef references the Harbor connection object to use.
 	// When the operator is started with --harbor-connection, this field may be omitted.
@@ -127,6 +132,8 @@ type HarborClaimSpecBase struct {
 type SecretReference struct {
 	// Name of the Secret.
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$`
 	Name string `json:"name"`
 	// Key inside the Secret data. When omitted, the controller using this
 	// reference will apply a sensible default.
@@ -135,6 +142,8 @@ type SecretReference struct {
 	// Namespace of the Secret. When omitted, the controller uses the namespace of
 	// the referencing namespaced resource. References from cluster-scoped resources
 	// must set this field explicitly because they have no namespace.
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`
 	// +optional
 	Namespace string `json:"namespace,omitempty"`
 }
@@ -145,9 +154,13 @@ type SecretReference struct {
 type SecretObjectReference struct {
 	// Name of the Secret.
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$`
 	Name string `json:"name"`
 	// Namespace of the Secret. When omitted, the controller uses the namespace
 	// of the referencing namespaced resource.
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`
 	// +optional
 	Namespace string `json:"namespace,omitempty"`
 }
@@ -156,8 +169,12 @@ type SecretObjectReference struct {
 type ProjectReference struct {
 	// Name of the Project resource.
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$`
 	Name string `json:"name"`
 	// Namespace of the Project resource. Defaults to the referencing resource namespace.
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`
 	// +optional
 	Namespace string `json:"namespace,omitempty"`
 }
@@ -166,18 +183,35 @@ type ProjectReference struct {
 type RegistryReference struct {
 	// Name of the Registry resource.
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$`
 	Name string `json:"name"`
 	// Namespace of the Registry resource. Defaults to the referencing resource namespace.
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`
 	// +optional
 	Namespace string `json:"namespace,omitempty"`
+}
+
+// PreheatInstanceReference identifies a cluster-scoped PreheatInstance resource.
+type PreheatInstanceReference struct {
+	// Name of the PreheatInstance resource.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$`
+	Name string `json:"name"`
 }
 
 // UserReference identifies a User custom resource.
 type UserReference struct {
 	// Name of the User resource.
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$`
 	Name string `json:"name"`
 	// Namespace of the User resource. Defaults to the referencing resource namespace.
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`
 	// +optional
 	Namespace string `json:"namespace,omitempty"`
 }
@@ -186,8 +220,12 @@ type UserReference struct {
 type UserGroupClaimReference struct {
 	// Name of the UserGroupClaim resource.
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$`
 	Name string `json:"name"`
 	// Namespace of the UserGroupClaim resource. Defaults to the referencing resource namespace.
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`
 	// +optional
 	Namespace string `json:"namespace,omitempty"`
 }

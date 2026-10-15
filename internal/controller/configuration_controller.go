@@ -196,5 +196,18 @@ func (r *ConfigurationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err != nil {
 		return err
 	}
+	builder = watchSecretReferences(builder, r.Client,
+		func() client.ObjectList { return &harborv1alpha1.ConfigurationList{} },
+		func(obj client.Object) []harborv1alpha1.SecretReference {
+			configuration := obj.(*harborv1alpha1.Configuration)
+			references := make([]harborv1alpha1.SecretReference, 0, len(configuration.Spec.Settings))
+			for _, setting := range configuration.Spec.Settings {
+				if setting.ValueFrom != nil {
+					references = append(references, setting.ValueFrom.SecretKeyRef)
+				}
+			}
+			return references
+		},
+	)
 	return builder.Complete(r)
 }

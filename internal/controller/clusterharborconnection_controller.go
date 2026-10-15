@@ -90,8 +90,14 @@ func (r *ClusterHarborConnectionReconciler) Reconcile(ctx context.Context, req c
 }
 
 func (r *ClusterHarborConnectionReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	builder := ctrl.NewControllerManagedBy(mgr).
 		For(&harborv1alpha1.ClusterHarborConnection{}).
-		Named("clusterharborconnection").
-		Complete(r)
+		Named("clusterharborconnection")
+	builder = watchSecretReferences(builder, r.Client,
+		func() client.ObjectList { return &harborv1alpha1.ClusterHarborConnectionList{} },
+		func(obj client.Object) []harborv1alpha1.SecretReference {
+			return harborConnectionSecretReferences(obj.(*harborv1alpha1.ClusterHarborConnection).Spec)
+		},
+	)
+	return builder.Complete(r)
 }

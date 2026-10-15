@@ -23,8 +23,9 @@ type RegistrySpec struct {
 	// +optional
 	Description string `json:"description,omitempty"`
 
-	// URL is the registry URL.
-	// +kubebuilder:validation:Format=url
+	// URL is the absolute HTTP or HTTPS URL of the registry endpoint.
+	// +kubebuilder:validation:Format=uri
+	// +kubebuilder:validation:Pattern=`^https?://[^/?#]+(/[^?#]*)?$`
 	URL string `json:"url"`
 
 	// Credential holds authentication details for the registry.
@@ -36,7 +37,7 @@ type RegistrySpec struct {
 	CACertificate string `json:"caCertificate,omitempty"`
 
 	// CACertificateRef references a secret value holding the PEM-encoded CA certificate.
-	// If set, it overrides CACertificate.
+	// It is mutually exclusive with caCertificate.
 	// +optional
 	CACertificateRef *SecretReference `json:"caCertificateRef,omitempty"`
 

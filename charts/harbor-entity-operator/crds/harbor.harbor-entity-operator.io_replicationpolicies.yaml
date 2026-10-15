@@ -108,11 +108,15 @@ spec:
                 properties:
                   name:
                     description: Name of the Registry resource.
+                    maxLength: 253
                     minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                     type: string
                   namespace:
                     description: Namespace of the Registry resource. Defaults to the
                       referencing resource namespace.
+                    maxLength: 63
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$
                     type: string
                 required:
                 - name
@@ -160,6 +164,9 @@ spec:
                     type: string
                   name:
                     description: Name of the referenced Harbor connection object.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                     type: string
                 required:
                 - name
@@ -188,11 +195,15 @@ spec:
                 properties:
                   name:
                     description: Name of the Registry resource.
+                    maxLength: 253
                     minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                     type: string
                   namespace:
                     description: Namespace of the Registry resource. Defaults to the
                       referencing resource namespace.
+                    maxLength: 63
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$
                     type: string
                 required:
                 - name
@@ -210,6 +221,7 @@ spec:
                     properties:
                       cron:
                         description: Cron is the cron expression for scheduled triggers.
+                        minLength: 1
                         type: string
                     type: object
                   type:
@@ -227,14 +239,18 @@ spec:
               rule: has(self.sourceRegistryRef)
             - message: destinationRegistryRef is required
               rule: has(self.destinationRegistryRef)
-            - message: trigger.settings.cron must be set when trigger.type is scheduled
+            - message: trigger.settings.cron must be non-empty when trigger.type is
+                scheduled
               rule: '!has(self.trigger) || self.trigger.type != ''scheduled'' || (has(self.trigger.settings)
-                && has(self.trigger.settings.cron))'
+                && has(self.trigger.settings.cron) && size(self.trigger.settings.cron)
+                > 0)'
             - message: registry references are immutable; delete and recreate the
                 ReplicationPolicy
               rule: '!has(oldSelf.sourceRegistryRef) || (has(self.sourceRegistryRef)
                 && self.sourceRegistryRef == oldSelf.sourceRegistryRef && has(self.destinationRegistryRef)
                 && self.destinationRegistryRef == oldSelf.destinationRegistryRef)'
+            - message: driftDetectionInterval must not be negative
+              rule: '!has(self.driftDetectionInterval) || !self.driftDetectionInterval.startsWith(''-'')'
           status:
             description: ReplicationPolicyStatus defines the observed state of ReplicationPolicy.
             properties:

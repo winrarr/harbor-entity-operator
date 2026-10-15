@@ -60,7 +60,7 @@ check: ## Run the non-E2E CI baseline.
 	$(MAKE) build-docs-site
 
 .PHONY: test
-test: $(SETUP_ENVTEST) ## Run non-E2E Go tests.
+test: $(SETUP_ENVTEST) ## Run deterministic unit and Kubernetes API contract tests.
 	KUBEBUILDER_ASSETS="$(shell $(SETUP_ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./... -coverprofile cover.out
 
 .PHONY: test-e2e

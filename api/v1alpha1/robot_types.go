@@ -82,9 +82,10 @@ type RobotAccess struct {
 }
 
 // RobotPermission defines a permission block for a robot account.
+// +kubebuilder:validation:XValidation:rule="self.kind == 'project' || !has(self.projectRef)",message="projectRef can only be set when kind is project"
 type RobotPermission struct {
 	// Kind defines the permission scope, such as "project" or "system".
-	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Enum=project;system
 	Kind string `json:"kind"`
 
 	// ProjectRef references the Project CR for project-scoped permissions.

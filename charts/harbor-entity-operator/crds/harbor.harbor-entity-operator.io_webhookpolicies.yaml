@@ -118,6 +118,9 @@ spec:
                     type: string
                   name:
                     description: Name of the referenced Harbor connection object.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                     type: string
                 required:
                 - name
@@ -128,11 +131,15 @@ spec:
                 properties:
                   name:
                     description: Name of the Project resource.
+                    maxLength: 253
                     minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                     type: string
                   namespace:
                     description: Namespace of the Project resource. Defaults to the
                       referencing resource namespace.
+                    maxLength: 63
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$
                     type: string
                 required:
                 - name
@@ -146,7 +153,11 @@ spec:
                   description: WebhookTargetSpec defines a single webhook target.
                   properties:
                     address:
-                      description: Address is the webhook target address.
+                      description: |-
+                        Address is the webhook target address.
+                        Query parameters are allowed; fragments are not sent as part of HTTP requests.
+                      format: uri
+                      pattern: ^https?://[^/?#@]+([^#]*)?$
                       type: string
                     authHeader:
                       description: AuthHeader is the auth header to send to the webhook
@@ -163,13 +174,17 @@ spec:
                           type: string
                         name:
                           description: Name of the Secret.
+                          maxLength: 253
                           minLength: 1
+                          pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                           type: string
                         namespace:
                           description: |-
                             Namespace of the Secret. When omitted, the controller uses the namespace of
                             the referencing namespaced resource. References from cluster-scoped resources
                             must set this field explicitly because they have no namespace.
+                          maxLength: 63
+                          pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$
                           type: string
                       required:
                       - name
@@ -184,8 +199,14 @@ spec:
                         Defaults to false. Enabling it is insecure.
                       type: boolean
                     type:
-                      description: Type defines the webhook notify type.
+                      description: |-
+                        Type defines the webhook notify type.
+                        Harbor validates this value against the configured notification driver.
+                      minLength: 1
                       type: string
+                  required:
+                  - address
+                  - type
                   type: object
                   x-kubernetes-validations:
                   - message: authHeader and authHeaderSecretRef are mutually exclusive
@@ -203,6 +224,8 @@ spec:
             - message: projectRef is immutable; delete and recreate the WebhookPolicy
               rule: '!has(oldSelf.projectRef) || (has(self.projectRef) && self.projectRef
                 == oldSelf.projectRef)'
+            - message: driftDetectionInterval must not be negative
+              rule: '!has(self.driftDetectionInterval) || !self.driftDetectionInterval.startsWith(''-'')'
           status:
             description: WebhookPolicyStatus defines the observed state of WebhookPolicy.
             properties:

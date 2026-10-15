@@ -6,12 +6,15 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // +kubebuilder:validation:XValidation:rule="!(has(self.authHeaderSecretRef) && size(self.authHeader) > 0)",message="authHeader and authHeaderSecretRef are mutually exclusive"
 type WebhookTargetSpec struct {
 	// Type defines the webhook notify type.
-	// +optional
-	Type string `json:"type,omitempty"`
+	// Harbor validates this value against the configured notification driver.
+	// +kubebuilder:validation:MinLength=1
+	Type string `json:"type"`
 
 	// Address is the webhook target address.
-	// +optional
-	Address string `json:"address,omitempty"`
+	// Query parameters are allowed; fragments are not sent as part of HTTP requests.
+	// +kubebuilder:validation:Format=uri
+	// +kubebuilder:validation:Pattern=`^https?://[^/?#@]+([^#]*)?$`
+	Address string `json:"address"`
 
 	// AuthHeader is the auth header to send to the webhook target.
 	// +optional

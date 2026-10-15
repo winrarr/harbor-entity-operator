@@ -121,6 +121,9 @@ spec:
                     type: string
                   name:
                     description: Name of the referenced Harbor connection object.
+                    maxLength: 253
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                     type: string
                 required:
                 - name
@@ -135,12 +138,16 @@ spec:
                 properties:
                   name:
                     description: Name of the Secret.
+                    maxLength: 253
                     minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                     type: string
                   namespace:
                     description: |-
                       Namespace of the Secret. When omitted, the controller uses the namespace
                       of the referencing namespaced resource.
+                    maxLength: 63
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$
                     type: string
                 required:
                 - name
@@ -239,7 +246,9 @@ spec:
                     kind:
                       description: Kind defines the permission scope, such as "project"
                         or "system".
-                      minLength: 1
+                      enum:
+                      - project
+                      - system
                       type: string
                     projectRef:
                       description: |-
@@ -248,11 +257,15 @@ spec:
                       properties:
                         name:
                           description: Name of the Project resource.
+                          maxLength: 253
                           minLength: 1
+                          pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                           type: string
                         namespace:
                           description: Namespace of the Project resource. Defaults
                             to the referencing resource namespace.
+                          maxLength: 63
+                          pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$
                           type: string
                       required:
                       - name
@@ -261,6 +274,9 @@ spec:
                   - access
                   - kind
                   type: object
+                  x-kubernetes-validations:
+                  - message: projectRef can only be set when kind is project
+                    rule: self.kind == 'project' || !has(self.projectRef)
                 minItems: 1
                 type: array
               reconcileNonce:
@@ -282,13 +298,17 @@ spec:
                     type: string
                   name:
                     description: Name of the Secret.
+                    maxLength: 253
                     minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$
                     type: string
                   namespace:
                     description: |-
                       Namespace of the Secret. When omitted, the controller uses the namespace of
                       the referencing namespaced resource. References from cluster-scoped resources
                       must set this field explicitly because they have no namespace.
+                    maxLength: 63
+                    pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$
                     type: string
                 required:
                 - name
@@ -302,6 +322,8 @@ spec:
               rule: self.duration == -1 || self.duration > 0
             - message: at least one of secretRef or imagePullSecretRef must be set
               rule: has(self.secretRef) || has(self.imagePullSecretRef)
+            - message: driftDetectionInterval must not be negative
+              rule: '!has(self.driftDetectionInterval) || !self.driftDetectionInterval.startsWith(''-'')'
           status:
             description: RobotStatus defines the observed state of Robot.
             properties:

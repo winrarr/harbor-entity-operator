@@ -228,6 +228,9 @@ func normalizeReplicationPolicy(in harborclient.ReplicationPolicy) harborclient.
 	if in.DestRegistry != nil {
 		in.DestRegistry = &harborclient.Registry{ID: in.DestRegistry.ID}
 	}
+	if in.Filters != nil {
+		in.Filters = append([]harborclient.ReplicationFilter(nil), in.Filters...)
+	}
 	for i := range in.Filters {
 		in.Filters[i].Value = normalizeAny(in.Filters[i].Value)
 	}
