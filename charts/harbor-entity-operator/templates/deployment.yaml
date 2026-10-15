@@ -58,6 +58,7 @@ spec:
             - --allow-cross-namespace-references={{ .Values.allowCrossNamespaceReferences }}
             - --default-drift-detection-interval={{ .Values.defaultDriftDetectionInterval }}
             - --harbor-request-timeout={{ .Values.harborRequestTimeout }}
+            - --harbor-max-concurrent-requests={{ .Values.harborMaxConcurrentRequests }}
             {{- if .Values.metrics.enabled }}
             - --metrics-bind-address=:{{ .Values.metrics.port }}
             - --metrics-secure={{ .Values.metrics.secure }}

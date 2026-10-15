@@ -32,6 +32,8 @@ spec:
     key: secret
   imagePullSecretRef:
     name: harbor-robot-ci-pull
+    labels:
+      operator.example.io/secret-consumer: tenant-a
 ```
 
 ## Key Fields
@@ -64,14 +66,19 @@ Both fields may be set when consumers need both Secret formats.
   Reference to the operator-managed secret where the generated robot secret is written.
   The Secret contains the token under `secret` by default and Harbor's canonical
   robot username under `username`; that key is reserved and cannot be selected
-  for the token.
+  for the token. Optional `namespace`, `labels`, and `annotations` select the
+  destination namespace and metadata. When `labels` or `annotations` change, the
+  operator removes metadata keys previously set through this reference while
+  preserving unrelated metadata and its reserved ownership metadata.
   If the Secret already exists, it must already be managed by the same `Robot`.
 
 - **spec.imagePullSecretRef** (object, optional)
   References a separate operator-managed Secret containing a
   `kubernetes.io/dockerconfigjson` image-pull credential for the resolved Harbor
   connection. The generated configuration uses the Robot's current canonical
-  username and token, and defaults to the Robot namespace.
+  username and token, and defaults to the Robot namespace. Optional `labels` and
+  `annotations` are reconciled using the same merge and cleanup behavior as
+  `secretRef`. The field has a fixed data shape and does not accept `key`.
 
   When `spec.secretRef` is omitted, this Secret is the Robot's sole credential
   output and is also used as the credential source during later reconciles.
@@ -81,6 +88,13 @@ Both fields may be set when consumers need both Secret formats.
 
 - **spec.creationPolicy** (string, optional)
   Controls whether the robot is created, adopted, or either. When omitted, uses the operator's default creation policy (`Create` unless configured otherwise).
+
+Project-scoped Robot names are persisted by Harbor as the project name, a `+`
+separator, and the requested Robot name. The combined name must be at most 255
+characters. Reconciliation reports a Ready error before sending a create
+request when the name would exceed that limit; it never truncates or rewrites
+`metadata.name`. System-scoped Robots use `metadata.name` directly and are not
+subject to the combined project-name check.
 
 Robot secrets are rotated automatically once Harbor reports that the robot
 credential has expired (based on `expires_at`). The operator then refreshes the
@@ -129,3 +143,47 @@ generated [`HarborSpecBase` reference](../reference/api.md#harborspecbase).
   only configured output, the operator reads the current token from its managed
   Docker configuration when reconciling the Robot.
 - The controller does not adopt or overwrite unrelated existing Secrets.
+
+## Distribute an image-pull Secret with Capsule
+
+Set a selector label on the generated image-pull Secret and use that label from
+a Capsule `TenantResource`. The Secret can live in a shared namespace; Capsule
+selects it by label and propagates it into the tenant's namespaces.
+
+```yaml
+apiVersion: harbor.harbor-entity-operator.io/v1alpha1
+kind: Robot
+metadata:
+  name: ci
+  namespace: shared-secrets
+spec:
+  level: project
+  permissions:
+    - kind: project
+      projectRef:
+        name: library
+      access:
+        - resource: repository
+          action: pull
+  imagePullSecretRef:
+    name: harbor-robot-ci-pull
+    labels:
+      operator.example.io/secret-consumer: tenant-a
+---
+apiVersion: capsule.clastix.io/v1beta2
+kind: TenantResource
+metadata:
+  name: harbor-robot-pull-secrets
+  namespace: tenant-a
+spec:
+  resources:
+    - namespacedItems:
+        - apiVersion: v1
+          kind: Secret
+          selector:
+            matchLabels:
+              operator.example.io/secret-consumer: tenant-a
+```
+
+The operator continues to own the Secret's data and ownership metadata. Capsule
+copies matching Secrets to namespaces belonging to the `TenantResource` owner.

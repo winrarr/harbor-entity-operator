@@ -90,6 +90,9 @@ defaultDriftDetectionInterval: 0s
 
 harborRequestTimeout: 30s
 
+# Process-wide cap for simultaneous Harbor API requests across every controller.
+harborMaxConcurrentRequests: 20
+
 pdb:
   enabled: false
   minAvailable: 1

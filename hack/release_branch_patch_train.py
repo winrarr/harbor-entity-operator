@@ -13,11 +13,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from required_checks import DEFAULT_REQUIRED_CHECKS, wait_for_required_checks as wait_for_checks
+from release_policy import release_branches_from_git, release_line_key, supported_release_branches
 
 
 DRY_RUN = os.environ.get("DRY_RUN", "false") == "true"
 RELEASE_BRANCH = os.environ.get("RELEASE_BRANCH", "")
-SUPPORTED_RELEASE_BRANCH_COUNT = int(os.environ.get("SUPPORTED_RELEASE_BRANCH_COUNT", "3"))
+EMERGENCY_OVERRIDE = os.environ.get("EMERGENCY_OVERRIDE", "false") == "true"
+EMERGENCY_REASON = os.environ.get("EMERGENCY_REASON", "").strip()
 
 REQUIRED_CHECKS = DEFAULT_REQUIRED_CHECKS
 AUTO_RELEASE_TRIGGER_PATHS = {
@@ -137,31 +139,15 @@ def tag_message(tag: str) -> str:
 
 
 def list_release_branches() -> list[str]:
-    if RELEASE_BRANCH:
-        return [RELEASE_BRANCH]
-
-    result = run_out(
-        ["git", "for-each-ref", "--format=%(refname:strip=3)", "refs/remotes/origin/release/*"],
-        check=False,
-    )
-    return [line for line in result.splitlines() if line]
+    return release_branches_from_git()
 
 
 def branch_version_key(branch: str) -> tuple[int, int] | None:
-    release_line = branch.removeprefix("release/").removeprefix("v")
-    if not re.match(r"^[0-9]+\.[0-9]+$", release_line):
-        return None
-    major, minor = release_line.split(".")
-    return int(major), int(minor)
+    return release_line_key(branch)
 
 
 def filter_supported_release_branches(branches: list[str]) -> list[str]:
-    if RELEASE_BRANCH:
-        return branches
-
-    keyed = [(key, branch) for branch in branches if (key := branch_version_key(branch))]
-    keyed.sort(key=lambda item: item[0])
-    return [branch for _, branch in keyed[-SUPPORTED_RELEASE_BRANCH_COUNT:]]
+    return supported_release_branches(branches)
 
 
 def chart_yaml_value(ref: str, field: str) -> str:
@@ -237,6 +223,11 @@ def process_branch(branch: str) -> None:
     if not BRANCH_RE.match(branch):
         log(f"Skipping {branch}: expected branch name format release/v<major>.<minor>")
         return
+    if branch not in filter_supported_release_branches(list_release_branches()):
+        if not EMERGENCY_OVERRIDE or not EMERGENCY_REASON:
+            log(f"Skipping {branch}: outside the supported maintenance window; use the documented emergency override for security or emergency work")
+            return
+        log(f"Emergency override selected for unsupported line {branch} with a documented reason")
 
     remote_ref = f"origin/{branch}"
     if run(["git", "rev-parse", "--verify", "--quiet", remote_ref], check=False).returncode != 0:
@@ -438,6 +429,13 @@ def create_dependency_patch_release(
 
 
 def main() -> int:
+    if EMERGENCY_OVERRIDE and not EMERGENCY_REASON:
+        log("Emergency override requires a non-empty EMERGENCY_REASON")
+        return 2
+    if EMERGENCY_REASON and not EMERGENCY_OVERRIDE:
+        log("EMERGENCY_REASON requires EMERGENCY_OVERRIDE=true")
+        return 2
+
     run(["git", "fetch", "origin", "+refs/heads/*:refs/remotes/origin/*", "--tags", "--prune"])
 
     branches = list_release_branches()
@@ -445,7 +443,9 @@ def main() -> int:
         log("No release branches found")
         return 0
 
-    if not RELEASE_BRANCH:
+    if RELEASE_BRANCH:
+        branches = [RELEASE_BRANCH]
+    else:
         branches = filter_supported_release_branches(branches)
         if not branches:
             log("No supported release branches found")

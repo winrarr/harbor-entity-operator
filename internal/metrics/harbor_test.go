@@ -59,3 +59,22 @@ func TestObserveHarborRequestRecordsStatusAndDuration(t *testing.T) {
 		})
 	}
 }
+
+func TestObserveHarborHTTPClientCacheUsesOnlyBoundedEventLabels(t *testing.T) {
+	for _, event := range []string{"hit", "miss", "invalidation", "eviction"} {
+		counter := harborHTTPClientCacheEvents.WithLabelValues(event)
+		var beforeMetric dto.Metric
+		if err := counter.Write(&beforeMetric); err != nil {
+			t.Fatal(err)
+		}
+		before := beforeMetric.GetCounter().GetValue()
+		ObserveHarborHTTPClientCache(event)
+		var afterMetric dto.Metric
+		if err := counter.Write(&afterMetric); err != nil {
+			t.Fatal(err)
+		}
+		if got := afterMetric.GetCounter().GetValue() - before; got != 1 {
+			t.Fatalf("cache event %q counter delta = %v, want 1", event, got)
+		}
+	}
+}

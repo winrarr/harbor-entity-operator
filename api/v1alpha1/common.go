@@ -148,9 +148,41 @@ type SecretReference struct {
 	Namespace string `json:"namespace,omitempty"`
 }
 
-// SecretObjectReference identifies a Secret object without selecting a key.
-// It is used for operator-managed Secret outputs whose data shape is fixed by
-// the referencing resource.
+// SecretOutputReference configures a Secret generated and managed by the operator.
+// Its type, data, and ownership metadata remain under controller control.
+// +kubebuilder:validation:XValidation:rule="!has(self.labels) || !('harbor.harbor-entity-operator.io/managed-by' in self.labels)",message="labels must not set the reserved operator managed-by label"
+// +kubebuilder:validation:XValidation:rule="!has(self.annotations) || (!('harbor.harbor-entity-operator.io/owner-kind' in self.annotations) && !('harbor.harbor-entity-operator.io/owner-name' in self.annotations) && !('harbor.harbor-entity-operator.io/owner-namespace' in self.annotations) && !('harbor.harbor-entity-operator.io/output-metadata-keys' in self.annotations))",message="annotations must not set reserved operator ownership metadata"
+type SecretOutputReference struct {
+	// Name of the Secret.
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?)*$`
+	Name string `json:"name"`
+	// Namespace of the output Secret. When omitted, the controller uses the
+	// namespace of the referencing namespaced resource.
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+	// Key inside the Secret data for outputs that expose one selected value.
+	// For Robot credentials, this selects the token key and defaults to "secret".
+	// Fixed-shape outputs such as image-pull credentials do not accept this field.
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9._-]+$`
+	// +optional
+	Key string `json:"key,omitempty"`
+	// Labels to apply to the generated Secret. The operator's reserved
+	// ownership label is managed by the controller and cannot be overridden.
+	// +optional
+	Labels map[string]string `json:"labels,omitempty"`
+	// Annotations to apply to the generated Secret. The operator's reserved
+	// ownership annotations are managed by the controller and cannot be overridden.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
+// SecretObjectReference identifies an existing Secret object without selecting a key.
+// It is used for Harbor resources that read fixed-shape Secret data.
 type SecretObjectReference struct {
 	// Name of the Secret.
 	// +kubebuilder:validation:MinLength=1

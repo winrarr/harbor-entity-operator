@@ -130,12 +130,35 @@ spec:
                 type: object
               imagePullSecretRef:
                 description: |-
-                  ImagePullSecretRef references the operator-managed Secret that contains
+                  ImagePullSecretRef configures the operator-managed Secret that contains
                   a Kubernetes dockerconfigjson image-pull credential for this robot.
                   The Secret is written with the Harbor registry host from the resolved
                   Harbor connection and the current robot credentials. Its namespace
-                  defaults to the Robot namespace.
+                  defaults to the Robot namespace. Name, namespace, labels, and annotations
+                  configure the generated Secret destination and metadata.
                 properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Annotations to apply to the generated Secret. The operator's reserved
+                      ownership annotations are managed by the controller and cannot be overridden.
+                    type: object
+                  key:
+                    description: |-
+                      Key inside the Secret data for outputs that expose one selected value.
+                      For Robot credentials, this selects the token key and defaults to "secret".
+                      Fixed-shape outputs such as image-pull credentials do not accept this field.
+                    maxLength: 253
+                    pattern: ^[A-Za-z0-9._-]+$
+                    type: string
+                  labels:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Labels to apply to the generated Secret. The operator's reserved
+                      ownership label is managed by the controller and cannot be overridden.
+                    type: object
                   name:
                     description: Name of the Secret.
                     maxLength: 253
@@ -144,14 +167,24 @@ spec:
                     type: string
                   namespace:
                     description: |-
-                      Namespace of the Secret. When omitted, the controller uses the namespace
-                      of the referencing namespaced resource.
+                      Namespace of the output Secret. When omitted, the controller uses the
+                      namespace of the referencing namespaced resource.
                     maxLength: 63
                     pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$
                     type: string
                 required:
                 - name
                 type: object
+                x-kubernetes-validations:
+                - message: labels must not set the reserved operator managed-by label
+                  rule: '!has(self.labels) || !(''harbor.harbor-entity-operator.io/managed-by''
+                    in self.labels)'
+                - message: annotations must not set reserved operator ownership metadata
+                  rule: '!has(self.annotations) || (!(''harbor.harbor-entity-operator.io/owner-kind''
+                    in self.annotations) && !(''harbor.harbor-entity-operator.io/owner-name''
+                    in self.annotations) && !(''harbor.harbor-entity-operator.io/owner-namespace''
+                    in self.annotations) && !(''harbor.harbor-entity-operator.io/output-metadata-keys''
+                    in self.annotations))'
               level:
                 description: |-
                   Level is the scope of the robot account.
@@ -284,18 +317,34 @@ spec:
                 type: string
               secretRef:
                 description: |-
-                  SecretRef references the operator-managed secret key holding the robot secret.
-                  The operator writes the generated robot secret to this location and expects
-                  the Secret to either not exist yet or already be managed by this Robot.
-                  The Secret also contains the canonical Harbor robot username under the
-                  reserved key "username".
+                  SecretRef configures the operator-managed Secret holding the robot secret.
+                  The generated Secret also contains Harbor's canonical robot username under
+                  the reserved key "username". Name and key retain their existing defaults;
+                  namespace, labels, and annotations are optional output metadata settings.
                   At least one of secretRef or imagePullSecretRef must be set.
                 properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Annotations to apply to the generated Secret. The operator's reserved
+                      ownership annotations are managed by the controller and cannot be overridden.
+                    type: object
                   key:
                     description: |-
-                      Key inside the Secret data. When omitted, the controller using this
-                      reference will apply a sensible default.
+                      Key inside the Secret data for outputs that expose one selected value.
+                      For Robot credentials, this selects the token key and defaults to "secret".
+                      Fixed-shape outputs such as image-pull credentials do not accept this field.
+                    maxLength: 253
+                    pattern: ^[A-Za-z0-9._-]+$
                     type: string
+                  labels:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Labels to apply to the generated Secret. The operator's reserved
+                      ownership label is managed by the controller and cannot be overridden.
+                    type: object
                   name:
                     description: Name of the Secret.
                     maxLength: 253
@@ -304,15 +353,24 @@ spec:
                     type: string
                   namespace:
                     description: |-
-                      Namespace of the Secret. When omitted, the controller uses the namespace of
-                      the referencing namespaced resource. References from cluster-scoped resources
-                      must set this field explicitly because they have no namespace.
+                      Namespace of the output Secret. When omitted, the controller uses the
+                      namespace of the referencing namespaced resource.
                     maxLength: 63
                     pattern: ^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$
                     type: string
                 required:
                 - name
                 type: object
+                x-kubernetes-validations:
+                - message: labels must not set the reserved operator managed-by label
+                  rule: '!has(self.labels) || !(''harbor.harbor-entity-operator.io/managed-by''
+                    in self.labels)'
+                - message: annotations must not set reserved operator ownership metadata
+                  rule: '!has(self.annotations) || (!(''harbor.harbor-entity-operator.io/owner-kind''
+                    in self.annotations) && !(''harbor.harbor-entity-operator.io/owner-name''
+                    in self.annotations) && !(''harbor.harbor-entity-operator.io/owner-namespace''
+                    in self.annotations) && !(''harbor.harbor-entity-operator.io/output-metadata-keys''
+                    in self.annotations))'
             required:
             - level
             - permissions
@@ -322,6 +380,8 @@ spec:
               rule: self.duration == -1 || self.duration > 0
             - message: at least one of secretRef or imagePullSecretRef must be set
               rule: has(self.secretRef) || has(self.imagePullSecretRef)
+            - message: imagePullSecretRef does not select a data key
+              rule: '!has(self.imagePullSecretRef) || !has(self.imagePullSecretRef.key)'
             - message: driftDetectionInterval must not be negative
               rule: '!has(self.driftDetectionInterval) || !self.driftDetectionInterval.startsWith(''-'')'
           status:

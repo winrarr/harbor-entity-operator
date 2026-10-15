@@ -1555,8 +1555,8 @@ _Appears in:_
 | `permissions` _[RobotPermission](#robotpermission) array_ | Permissions define the access granted to the robot account. |  | MinItems: 1 <br /> |
 | `disable` _boolean_ | Disable controls whether the robot account is disabled.<br />When omitted, the operator leaves it unset on creation and preserves the current value on update. |  | Optional: \{\} <br /> |
 | `duration` _integer_ | Duration is the token duration in days. Use -1 for never expires.<br />If omitted, it defaults to -1. | -1 | Optional: \{\} <br /> |
-| `secretRef` _[SecretReference](#secretreference)_ | SecretRef references the operator-managed secret key holding the robot secret.<br />The operator writes the generated robot secret to this location and expects<br />the Secret to either not exist yet or already be managed by this Robot.<br />The Secret also contains the canonical Harbor robot username under the<br />reserved key "username".<br />At least one of secretRef or imagePullSecretRef must be set. |  | Optional: \{\} <br /> |
-| `imagePullSecretRef` _[SecretObjectReference](#secretobjectreference)_ | ImagePullSecretRef references the operator-managed Secret that contains<br />a Kubernetes dockerconfigjson image-pull credential for this robot.<br />The Secret is written with the Harbor registry host from the resolved<br />Harbor connection and the current robot credentials. Its namespace<br />defaults to the Robot namespace. |  | Optional: \{\} <br /> |
+| `secretRef` _[SecretOutputReference](#secretoutputreference)_ | SecretRef configures the operator-managed Secret holding the robot secret.<br />The generated Secret also contains Harbor's canonical robot username under<br />the reserved key "username". Name and key retain their existing defaults;<br />namespace, labels, and annotations are optional output metadata settings.<br />At least one of secretRef or imagePullSecretRef must be set. |  | Optional: \{\} <br /> |
+| `imagePullSecretRef` _[SecretOutputReference](#secretoutputreference)_ | ImagePullSecretRef configures the operator-managed Secret that contains<br />a Kubernetes dockerconfigjson image-pull credential for this robot.<br />The Secret is written with the Harbor registry host from the resolved<br />Harbor connection and the current robot credentials. Its namespace<br />defaults to the Robot namespace. Name, namespace, labels, and annotations<br />configure the generated Secret destination and metadata. |  | Optional: \{\} <br /> |
 
 
 #### ScanAllSchedule
@@ -1668,20 +1668,39 @@ _Appears in:_
 
 
 
-SecretObjectReference identifies a Secret object without selecting a key.
-It is used for operator-managed Secret outputs whose data shape is fixed by
-the referencing resource.
+SecretObjectReference identifies an existing Secret object without selecting a key.
+It is used for Harbor resources that read fixed-shape Secret data.
 
 
 
 _Appears in:_
 - [PreheatInstanceSpec](#preheatinstancespec)
-- [RobotSpec](#robotspec)
 
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `name` _string_ | Name of the Secret. |  | MaxLength: 253 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?)*$` <br /> |
 | `namespace` _string_ | Namespace of the Secret. When omitted, the controller uses the namespace<br />of the referencing namespaced resource. |  | MaxLength: 63 <br />Pattern: `^[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?$` <br />Optional: \{\} <br /> |
+
+
+#### SecretOutputReference
+
+
+
+SecretOutputReference configures a Secret generated and managed by the operator.
+Its type, data, and ownership metadata remain under controller control.
+
+
+
+_Appears in:_
+- [RobotSpec](#robotspec)
+
+| Field | Description | Default | Validation |
+| --- | --- | --- | --- |
+| `name` _string_ | Name of the Secret. |  | MaxLength: 253 <br />MinLength: 1 <br />Pattern: `^[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?(\.[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?)*$` <br /> |
+| `namespace` _string_ | Namespace of the output Secret. When omitted, the controller uses the<br />namespace of the referencing namespaced resource. |  | MaxLength: 63 <br />Pattern: `^[a-z0-9]([-a-z0-9]\{0,61\}[a-z0-9])?$` <br />Optional: \{\} <br /> |
+| `key` _string_ | Key inside the Secret data for outputs that expose one selected value.<br />For Robot credentials, this selects the token key and defaults to "secret".<br />Fixed-shape outputs such as image-pull credentials do not accept this field. |  | MaxLength: 253 <br />Pattern: `^[A-Za-z0-9._-]+$` <br />Optional: \{\} <br /> |
+| `labels` _object (keys:string, values:string)_ | Labels to apply to the generated Secret. The operator's reserved<br />ownership label is managed by the controller and cannot be overridden. |  | Optional: \{\} <br /> |
+| `annotations` _object (keys:string, values:string)_ | Annotations to apply to the generated Secret. The operator's reserved<br />ownership annotations are managed by the controller and cannot be overridden. |  | Optional: \{\} <br /> |
 
 
 #### SecretReference
@@ -1699,7 +1718,6 @@ _Appears in:_
 - [HarborConnectionSpec](#harborconnectionspec)
 - [RegistryCredentialSpec](#registrycredentialspec)
 - [RegistrySpec](#registryspec)
-- [RobotSpec](#robotspec)
 - [ScannerRegistrationSpec](#scannerregistrationspec)
 - [UserSpec](#userspec)
 - [WebhookTargetSpec](#webhooktargetspec)

@@ -4,7 +4,6 @@ on:
   push:
     tags:
       - 'v*'
-      - 'chart-v*'
   workflow_dispatch:
     inputs:
       tag_name:
@@ -16,6 +15,15 @@ on:
         required: false
         default: false
         type: boolean
+      emergency_override:
+        description: Allow deliberate security or emergency work on an unsupported release line
+        required: false
+        default: false
+        type: boolean
+      emergency_reason:
+        description: Brief reason required when emergency_override is enabled
+        required: false
+        type: string
 
 permissions:
   checks: read
@@ -36,6 +44,7 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.emergency_override && 'release-emergency' || 'release-routine' }}
     steps:
       - name: Checkout release tag
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -55,6 +64,9 @@ jobs:
         id: metadata
         env:
           RELEASE_TAG: ${{ env.RELEASE_TAG }}
+          EVENT_NAME: ${{ github.event_name }}
+          EMERGENCY_OVERRIDE: ${{ github.event_name == 'workflow_dispatch' && inputs.emergency_override && 'true' || 'false' }}
+          EMERGENCY_REASON: ${{ inputs.emergency_reason || '' }}
         run: |
           set -euo pipefail
 
@@ -117,6 +129,14 @@ jobs:
               exit 1
               ;;
           esac
+
+          if ! python3 hack/release_policy.py check-version "$operator_version"; then
+            if [[ "$EVENT_NAME" != "workflow_dispatch" || "$EMERGENCY_OVERRIDE" != "true" || -z "$EMERGENCY_REASON" ]]; then
+              echo "Unsupported release lines require a manual emergency dispatch with a reason and approval through the release-emergency environment." >&2
+              exit 1
+            fi
+            echo "Emergency override authorized for release version $operator_version with a documented reason"
+          fi
 
           release_line="$(printf '%s' "${operator_version%%-rc.*}" | cut -d. -f1-2)"
           branch_ref="refs/remotes/origin/release/v${release_line}"

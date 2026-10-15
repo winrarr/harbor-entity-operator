@@ -62,6 +62,11 @@ check: ## Run the non-E2E CI baseline.
 .PHONY: test
 test: $(SETUP_ENVTEST) ## Run deterministic unit and Kubernetes API contract tests.
 	KUBEBUILDER_ASSETS="$(shell $(SETUP_ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./... -coverprofile cover.out
+	$(MAKE) test-scripts
+
+.PHONY: test-scripts
+test-scripts: ## Run deterministic unit tests for repository automation scripts.
+	python3 -m unittest discover -s hack -p 'test_*.py'
 
 .PHONY: test-e2e
 test-e2e: $(KIND) ## Run E2E tests against the current Kind cluster.

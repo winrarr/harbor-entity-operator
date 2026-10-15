@@ -1017,7 +1017,7 @@ func TestRobotImagePullSecretIsOwnedScopedAndReadable(t *testing.T) {
 	kubeClient := newAdvancedUnitClient(t, robot)
 	reconciler := &RobotReconciler{Client: kubeClient}
 	hc := harborclient.New("https://harbor.example.test:8443", "", "")
-	ref := &harborv1alpha1.SecretObjectReference{Name: "builder-pull"}
+	ref := &harborv1alpha1.SecretOutputReference{Name: "builder-pull"}
 	if err := reconciler.reconcileImagePullSecret(ctx, hc, robot, ref, "robot-token"); err != nil {
 		t.Fatalf("create image-pull Secret: %v", err)
 	}
@@ -1029,7 +1029,7 @@ func TestRobotImagePullSecretIsOwnedScopedAndReadable(t *testing.T) {
 	if err := kubeClient.Get(ctx, types.NamespacedName{Namespace: testNamespace, Name: ref.Name}, &stored); err != nil {
 		t.Fatalf("get image-pull Secret: %v", err)
 	}
-	if stored.Type != corev1.SecretTypeDockerConfigJson || !secretOwnedBy(&stored, robot, "Robot") {
+	if stored.Type != corev1.SecretTypeDockerConfigJson || !robotSecretOwnedBy(&stored, robot) {
 		t.Fatalf("image-pull Secret metadata = type %q, labels=%v annotations=%v", stored.Type, stored.Labels, stored.Annotations)
 	}
 	if err := reconciler.reconcileImagePullSecret(ctx, hc, robot, ref, ""); err == nil || !strings.Contains(err.Error(), "robot secret is empty") {
@@ -1050,12 +1050,12 @@ func TestRobotImagePullSecretIsOwnedScopedAndReadable(t *testing.T) {
 		t.Fatalf("create foreign image-pull Secret: %v", err)
 	}
 	_ = otherOwner
-	if _, err := reconciler.readImagePullSecretToken(ctx, hc, robot, &harborv1alpha1.SecretObjectReference{Name: foreign.Name}); err == nil || !strings.Contains(err.Error(), "not managed by Robot") {
+	if _, err := reconciler.readImagePullSecretToken(ctx, hc, robot, &harborv1alpha1.SecretOutputReference{Name: foreign.Name}); err == nil || !strings.Contains(err.Error(), "not managed by Robot") {
 		t.Fatalf("foreign image-pull Secret error = %v", err)
 	}
 	allowCrossNamespace := false
 	reconciler.Options = OperatorOptions{allowCrossNamespaceReferences: &allowCrossNamespace}
-	if err := reconciler.reconcileImagePullSecret(ctx, hc, robot, &harborv1alpha1.SecretObjectReference{Name: "cross", Namespace: "other"}, "token"); err == nil || !strings.Contains(err.Error(), "cross-namespace") {
+	if err := reconciler.reconcileImagePullSecret(ctx, hc, robot, &harborv1alpha1.SecretOutputReference{Name: "cross", Namespace: "other"}, "token"); err == nil || !strings.Contains(err.Error(), "cross-namespace") {
 		t.Fatalf("disallowed cross-namespace image-pull Secret error = %v", err)
 	}
 }

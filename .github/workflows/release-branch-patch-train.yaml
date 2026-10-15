@@ -21,6 +21,15 @@ on:
         required: false
         default: false
         type: boolean
+      emergency_override:
+        description: Allow deliberate security or emergency work on an unsupported release line
+        required: false
+        default: false
+        type: boolean
+      emergency_reason:
+        description: Brief reason required when emergency_override is enabled
+        required: false
+        type: string
 
 concurrency:
   group: release-branch-patch-train
@@ -29,6 +38,7 @@ concurrency:
 jobs:
   patch-train:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.emergency_override && 'release-emergency' || 'release-routine' }}
     permissions:
       contents: write
       checks: read
@@ -52,5 +62,7 @@ jobs:
         env:
           RELEASE_BRANCH: ${{ github.event_name == 'workflow_dispatch' && inputs.release_branch || github.event_name == 'push' && github.ref_name || '' }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
+          EMERGENCY_OVERRIDE: ${{ github.event_name == 'workflow_dispatch' && inputs.emergency_override && 'true' || 'false' }}
+          EMERGENCY_REASON: ${{ inputs.emergency_reason || '' }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 hack/release_branch_patch_train.py

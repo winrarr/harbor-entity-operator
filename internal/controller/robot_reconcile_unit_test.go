@@ -79,9 +79,14 @@ func TestRobotReconcileCreatesUpdatesRotatedSecretsAndFinalizes(t *testing.T) {
 			Level:          "project",
 			Description:    "release automation",
 			Duration:       -1,
-			SecretRef:      &harborv1alpha1.SecretReference{Name: "release-credentials", Key: "token"},
-			ImagePullSecretRef: &harborv1alpha1.SecretObjectReference{
-				Name: "release-pull-secret",
+			SecretRef: &harborv1alpha1.SecretOutputReference{
+				Name: "release-credentials", Key: "token",
+				Labels:      map[string]string{"capsule.clastix.io/tenant": "demo"},
+				Annotations: map[string]string{"example.com/managed-by": "tenant-team"},
+			},
+			ImagePullSecretRef: &harborv1alpha1.SecretOutputReference{
+				Name:   "release-pull-secret",
+				Labels: map[string]string{"capsule.clastix.io/tenantresource": "demo"},
 			},
 			Permissions: []harborv1alpha1.RobotPermission{{
 				Kind:       "project",
@@ -113,8 +118,11 @@ func TestRobotReconcileCreatesUpdatesRotatedSecretsAndFinalizes(t *testing.T) {
 	if err := kubeClient.Get(ctx, types.NamespacedName{Namespace: robot.Namespace, Name: "release-credentials"}, &tokenSecret); err != nil {
 		t.Fatalf("get robot token Secret: %v", err)
 	}
-	if string(tokenSecret.Data["token"]) != "initial-token" || string(tokenSecret.Data[robotUsernameSecretKey]) != "robot$release" || !secretOwnedBy(&tokenSecret, &stored, "Robot") {
+	if string(tokenSecret.Data["token"]) != "initial-token" || string(tokenSecret.Data[robotUsernameSecretKey]) != "robot$release" || !robotSecretOwnedBy(&tokenSecret, &stored) {
 		t.Fatalf("robot token Secret data/owner = %#v / %#v", tokenSecret.Data, tokenSecret.OwnerReferences)
+	}
+	if tokenSecret.Labels["capsule.clastix.io/tenant"] != "demo" || tokenSecret.Annotations["example.com/managed-by"] != "tenant-team" {
+		t.Fatalf("robot token Secret custom metadata = %#v / %#v", tokenSecret.Labels, tokenSecret.Annotations)
 	}
 	var pullSecret corev1.Secret
 	if err := kubeClient.Get(ctx, types.NamespacedName{Namespace: robot.Namespace, Name: "release-pull-secret"}, &pullSecret); err != nil {
@@ -123,6 +131,9 @@ func TestRobotReconcileCreatesUpdatesRotatedSecretsAndFinalizes(t *testing.T) {
 	var dockerCfg dockerConfig
 	if err := json.Unmarshal(pullSecret.Data[corev1.DockerConfigJsonKey], &dockerCfg); err != nil {
 		t.Fatalf("parse image pull Secret: %v", err)
+	}
+	if pullSecret.Labels["capsule.clastix.io/tenantresource"] != "demo" {
+		t.Fatalf("image pull Secret labels = %#v", pullSecret.Labels)
 	}
 	registryAuth := dockerCfg.Auths[server.Listener.Addr().String()]
 	if registryAuth.Username != "robot$release" || registryAuth.Password != "initial-token" || registryAuth.Auth != base64.StdEncoding.EncodeToString([]byte("robot$release:initial-token")) {
@@ -139,7 +150,14 @@ func TestRobotReconcileCreatesUpdatesRotatedSecretsAndFinalizes(t *testing.T) {
 	if err := kubeClient.Get(ctx, req.NamespacedName, &stored); err != nil {
 		t.Fatalf("reload robot before update: %v", err)
 	}
+	tokenSecret.Labels["support.example.net/external"] = "preserve"
+	if err := kubeClient.Update(ctx, &tokenSecret); err != nil {
+		t.Fatalf("add external robot Secret label: %v", err)
+	}
 	stored.Spec.Description = "updated release automation"
+	stored.Spec.SecretRef.Labels["capsule.clastix.io/tenant"] = "updated-demo"
+	stored.Spec.SecretRef.Annotations = nil
+	stored.Spec.ImagePullSecretRef.Labels = map[string]string{"capsule.clastix.io/tenantresource": "updated-demo"}
 	if err := kubeClient.Update(ctx, &stored); err != nil {
 		t.Fatalf("update robot spec: %v", err)
 	}
@@ -148,6 +166,18 @@ func TestRobotReconcileCreatesUpdatesRotatedSecretsAndFinalizes(t *testing.T) {
 	}
 	if updates != 1 || remote.Description != "updated release automation" {
 		t.Fatalf("robot update calls/remote description = %d/%q", updates, remote.Description)
+	}
+	if err := kubeClient.Get(ctx, types.NamespacedName{Namespace: robot.Namespace, Name: "release-credentials"}, &tokenSecret); err != nil {
+		t.Fatalf("get updated robot token Secret: %v", err)
+	}
+	if tokenSecret.Labels["capsule.clastix.io/tenant"] != "updated-demo" || tokenSecret.Labels["support.example.net/external"] != "preserve" || tokenSecret.Annotations["example.com/managed-by"] != "" {
+		t.Fatalf("updated robot token Secret metadata = %#v / %#v", tokenSecret.Labels, tokenSecret.Annotations)
+	}
+	if err := kubeClient.Get(ctx, types.NamespacedName{Namespace: robot.Namespace, Name: "release-pull-secret"}, &pullSecret); err != nil {
+		t.Fatalf("get updated image pull Secret: %v", err)
+	}
+	if pullSecret.Labels["capsule.clastix.io/tenantresource"] != "updated-demo" {
+		t.Fatalf("updated image pull Secret labels = %#v", pullSecret.Labels)
 	}
 
 	remote.ExpiresAt = int(time.Now().Add(-time.Hour).Unix())

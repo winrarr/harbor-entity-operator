@@ -110,6 +110,37 @@ func TestOperatorOptionsHarborRequestTimeout(t *testing.T) {
 	}
 }
 
+func TestOperatorOptionsHarborMaxConcurrentRequests(t *testing.T) {
+	defaults, err := NewOperatorOptions(OperatorConfig{
+		DefaultCreationPolicy: harborv1alpha1.CreationPolicyCreate,
+		HarborRequestTimeout:  30 * time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := defaults.maxConcurrentRequests(); got != defaultHarborMaxConcurrentRequests {
+		t.Fatalf("default max concurrent requests = %d, want %d", got, defaultHarborMaxConcurrentRequests)
+	}
+	options, err := NewOperatorOptions(OperatorConfig{
+		DefaultCreationPolicy:       harborv1alpha1.CreationPolicyCreate,
+		HarborRequestTimeout:        30 * time.Second,
+		HarborMaxConcurrentRequests: 7,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := options.maxConcurrentRequests(); got != 7 {
+		t.Fatalf("configured max concurrent requests = %d, want 7", got)
+	}
+	if _, err := NewOperatorOptions(OperatorConfig{
+		DefaultCreationPolicy:       harborv1alpha1.CreationPolicyCreate,
+		HarborRequestTimeout:        30 * time.Second,
+		HarborMaxConcurrentRequests: -1,
+	}); err == nil {
+		t.Fatal("NewOperatorOptions() accepted a negative Harbor concurrency limit")
+	}
+}
+
 func TestWithSecretReaderBypassesCachedClientAndReturnsCopiedOptions(t *testing.T) {
 	ctx := context.Background()
 	scheme := runtime.NewScheme()

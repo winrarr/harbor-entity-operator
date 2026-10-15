@@ -100,11 +100,11 @@ var _ = Describe("Robot Controller", func() {
 							},
 						},
 					},
-					SecretRef: &harborv1alpha1.SecretReference{
+					SecretRef: &harborv1alpha1.SecretOutputReference{
 						Name: "test-resource-secret",
 						Key:  "secret",
 					},
-					ImagePullSecretRef: &harborv1alpha1.SecretObjectReference{
+					ImagePullSecretRef: &harborv1alpha1.SecretOutputReference{
 						Name: "test-resource-image-pull",
 					},
 				},

@@ -7,6 +7,7 @@ on:
       - 'release/v*'
   push:
     branches:
+      - main
       - 'release/v*'
   workflow_dispatch:
 
@@ -20,6 +21,39 @@ jobs:
     steps:
       - name: Clone the code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Fetch release branches for support-window validation
+        if: github.event_name == 'pull_request' && startsWith(github.base_ref, 'release/v')
+        run: git fetch origin '+refs/heads/release/*:refs/remotes/origin/release/*' --prune
+
+      - name: Enforce supported release line
+        if: github.event_name == 'pull_request' && startsWith(github.base_ref, 'release/v')
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          EVENT_PATH: ${{ github.event_path }}
+        run: |
+          set -euo pipefail
+          if python3 hack/release_policy.py check-branch "$BASE_REF"; then
+            exit 0
+          fi
+
+          approved="$(python3 - "$EVENT_PATH" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as event_file:
+              event = json.load(event_file)
+          labels = {label["name"] for label in event.get("pull_request", {}).get("labels", [])}
+          print("true" if "release-emergency-approved" in labels else "false")
+          PY
+          )"
+          if [[ "$approved" != "true" ]]; then
+            echo "Unsupported release-line changes require a maintainer to review the emergency work and apply the release-emergency-approved label." >&2
+            exit 1
+          fi
+          echo "Proceeding with maintainer-approved emergency work on $BASE_REF."
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0

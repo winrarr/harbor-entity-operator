@@ -1,0 +1,254 @@
+name: Publish Chart-only Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Approved branch containing the chart change (main or release/vX.Y)
+        required: true
+        default: main
+        type: string
+      chart_version:
+        description: New stable Helm chart version to publish
+        required: true
+        type: string
+      dry_run:
+        description: Validate and build without publishing or creating a chart tag
+        required: false
+        default: false
+        type: boolean
+      emergency_override:
+        description: Allow deliberate security or emergency work on an unsupported operator line
+        required: false
+        default: false
+        type: boolean
+      emergency_reason:
+        description: Brief reason required when emergency_override is enabled
+        required: false
+        type: string
+
+permissions:
+  checks: read
+  contents: write
+  packages: write
+  id-token: write
+  attestations: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  CHART_REPOSITORY: ghcr.io/${{ github.repository_owner }}/charts
+  SOURCE_REF: ${{ inputs.source_ref }}
+  CHART_VERSION: ${{ inputs.chart_version }}
+  DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
+  EMERGENCY_OVERRIDE: ${{ inputs.emergency_override && 'true' || 'false' }}
+  EMERGENCY_REASON: ${{ inputs.emergency_reason || '' }}
+
+concurrency:
+  group: publish-chart-only-${{ inputs.chart_version }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.emergency_override && 'release-emergency' || 'release-routine' }}
+    steps:
+      - name: Check out selected source ref
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 0
+
+      - name: Fetch release branches and tags
+        run: git fetch origin '+refs/heads/*:refs/remotes/origin/*' --tags --prune
+
+      - name: Set up Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          version: v4.3.0
+
+      - name: Validate selected source and release metadata
+        id: metadata
+        env:
+          SOURCE_REF: ${{ env.SOURCE_REF }}
+          CHART_VERSION: ${{ env.CHART_VERSION }}
+          EMERGENCY_OVERRIDE: ${{ env.EMERGENCY_OVERRIDE }}
+          EMERGENCY_REASON: ${{ env.EMERGENCY_REASON }}
+        run: |
+          set -euo pipefail
+
+          source_ref="refs/remotes/origin/$SOURCE_REF"
+          if ! git show-ref --verify --quiet "$source_ref"; then
+            echo "Approved source ref $SOURCE_REF does not exist on origin" >&2
+            exit 1
+          fi
+          source_sha="$(git rev-parse HEAD)"
+          if [[ "$source_sha" != "$(git rev-parse "$source_ref")" ]]; then
+            echo "Checkout does not match selected source ref $SOURCE_REF" >&2
+            exit 1
+          fi
+
+          chart_yaml='charts/harbor-entity-operator/Chart.yaml'
+          app_version="$(awk '$1 == "appVersion:" { value=$2; gsub(/^"/, "", value); gsub(/"$/, "", value); print value; exit }' "$chart_yaml")"
+          chart_tag="$(python3 hack/chart_release_policy.py metadata "$SOURCE_REF" "$CHART_VERSION" "$app_version" "$EMERGENCY_OVERRIDE" "$EMERGENCY_REASON")"
+          existing_target_sha=""
+          if git show-ref --verify --quiet "refs/tags/${chart_tag}"; then
+            existing_target_sha="$(git rev-parse "refs/tags/${chart_tag}^{commit}")"
+          fi
+          tag_status="$(python3 hack/chart_release_policy.py check-tag "$chart_tag" "$source_sha" "$existing_target_sha")"
+          tag_exists=false
+          if [[ "$tag_status" == "exists" ]]; then
+            tag_exists=true
+          fi
+
+          {
+            echo "source_sha=$source_sha"
+            echo "app_version=$app_version"
+            echo "chart_tag=$chart_tag"
+            echo "tag_exists=$tag_exists"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Verify required checks for selected source
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_SHA: ${{ steps.metadata.outputs.source_sha }}
+        run: python3 hack/required_checks.py "$SOURCE_SHA" --wait
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify stable operator image exists
+        env:
+          OPERATOR_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          APP_VERSION: ${{ steps.metadata.outputs.app_version }}
+        run: |
+          set -euo pipefail
+          docker manifest inspect "${OPERATOR_IMAGE}:${APP_VERSION}" >/dev/null
+
+      - name: Log in to Helm registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login "${{ env.REGISTRY }}" -u "${{ github.actor }}" --password-stdin
+
+      - name: Package and validate chart immutability
+        id: package
+        env:
+          CHART_REPOSITORY: ${{ env.CHART_REPOSITORY }}
+          CHART_VERSION: ${{ env.CHART_VERSION }}
+          APP_VERSION: ${{ steps.metadata.outputs.app_version }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p dist remote-chart
+          chart_file="dist/harbor-entity-operator-${CHART_VERSION}.tgz"
+          helm package charts/harbor-entity-operator \
+            --version "$CHART_VERSION" \
+            --app-version "$APP_VERSION" \
+            --destination dist
+
+          chart_oci="oci://${CHART_REPOSITORY}/harbor-entity-operator"
+          if helm pull "$chart_oci" --version "$CHART_VERSION" --destination remote-chart 2>dist/helm-pull.err; then
+            remote_file="remote-chart/harbor-entity-operator-${CHART_VERSION}.tgz"
+            python3 hack/compare_chart_archives.py "$chart_file" "$remote_file"
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+          else
+            if ! grep -Eiq '404|not found|manifest unknown' dist/helm-pull.err; then
+              cat dist/helm-pull.err >&2
+              exit 1
+            fi
+            echo "already_published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create immutable chart tag
+        if: env.DRY_RUN != 'true' && steps.metadata.outputs.tag_exists != 'true'
+        env:
+          CHART_TAG: ${{ steps.metadata.outputs.chart_tag }}
+          SOURCE_SHA: ${{ steps.metadata.outputs.source_sha }}
+          SOURCE_REF: ${{ env.SOURCE_REF }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$CHART_TAG" "$SOURCE_SHA" -m "Chart-only release $CHART_TAG from $SOURCE_REF"
+          git push origin "refs/tags/$CHART_TAG"
+
+      - name: Push chart package
+        if: env.DRY_RUN != 'true' && steps.package.outputs.already_published != 'true'
+        env:
+          CHART_REPOSITORY: ${{ env.CHART_REPOSITORY }}
+          CHART_VERSION: ${{ env.CHART_VERSION }}
+        run: helm push "dist/harbor-entity-operator-${CHART_VERSION}.tgz" "oci://${CHART_REPOSITORY}"
+
+      - name: Verify published chart and resolve OCI digest
+        if: env.DRY_RUN != 'true'
+        id: published-chart
+        env:
+          CHART_REPOSITORY: ${{ env.CHART_REPOSITORY }}
+          CHART_VERSION: ${{ env.CHART_VERSION }}
+        run: |
+          set -euo pipefail
+
+          chart_file="dist/harbor-entity-operator-${CHART_VERSION}.tgz"
+          chart_oci="oci://${CHART_REPOSITORY}/harbor-entity-operator"
+          mkdir -p dist/verified-chart
+          helm pull "$chart_oci" --version "$CHART_VERSION" --destination dist/verified-chart >dist/helm-verify.out 2>&1
+          remote_file="dist/verified-chart/harbor-entity-operator-${CHART_VERSION}.tgz"
+          python3 hack/compare_chart_archives.py "$chart_file" "$remote_file"
+
+          chart_digest="$(sed -nE 's/^Digest: (sha256:[0-9a-f]{64})$/\1/p' dist/helm-verify.out | tail -n1)"
+          if [[ -z "$chart_digest" ]]; then
+            cat dist/helm-verify.out >&2
+            echo "Helm did not report the published chart OCI digest" >&2
+            exit 1
+          fi
+          echo "chart_digest=$chart_digest" >> "$GITHUB_OUTPUT"
+
+      - name: Attest chart package provenance
+        if: env.DRY_RUN != 'true'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.CHART_REPOSITORY }}/harbor-entity-operator
+          subject-digest: ${{ steps.published-chart.outputs.chart_digest }}
+          push-to-registry: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create or resume chart GitHub Release
+        if: env.DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHART_TAG: ${{ steps.metadata.outputs.chart_tag }}
+          CHART_VERSION: ${{ env.CHART_VERSION }}
+          SOURCE_REF: ${{ env.SOURCE_REF }}
+        run: |
+          set -euo pipefail
+
+          chart_file="dist/harbor-entity-operator-${CHART_VERSION}.tgz"
+          if gh release view "$CHART_TAG" --json assets > dist/release.json 2>/dev/null; then
+            asset_exists="$(python3 - "$CHART_VERSION" dist/release.json <<'PY'
+          import json
+          import sys
+
+          version, filename = sys.argv[1], f"harbor-entity-operator-{sys.argv[1]}.tgz"
+          with open(sys.argv[2], encoding="utf-8") as release_file:
+              release = json.load(release_file)
+          print("true" if any(asset.get("name") == filename for asset in release.get("assets", [])) else "false")
+          PY
+            )"
+            if [[ "$asset_exists" == "true" ]]; then
+              mkdir -p dist/release-asset
+              gh release download "$CHART_TAG" --pattern "$(basename "$chart_file")" --dir dist/release-asset
+              python3 hack/compare_chart_archives.py "$chart_file" "dist/release-asset/$(basename "$chart_file")"
+            else
+              gh release upload "$CHART_TAG" "$chart_file"
+            fi
+          else
+            gh release create "$CHART_TAG" "$chart_file" \
+              --title "$CHART_TAG" \
+              --notes "Chart-only release sourced from $SOURCE_REF. Operator image: ${IMAGE_NAME}:${{ steps.metadata.outputs.app_version }}."
+          fi
+
+      - name: Report dry-run result
+        if: env.DRY_RUN == 'true'
+        run: echo "Dry run passed for ${CHART_VERSION} from ${SOURCE_REF}; no chart, tag, attestation, or GitHub Release was published."

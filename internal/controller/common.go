@@ -2,12 +2,9 @@ package controller
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
-	"net/http"
 	"net/url"
 	"reflect"
 	"sort"
@@ -465,7 +462,20 @@ func buildHarborClient(ctx context.Context, options OperatorOptions, c client.Cl
 	if err != nil {
 		return nil, err
 	}
-	return newHarborClient(options, conn.baseURL, user, pass, caBundle)
+	fingerprint, err := harborClientFingerprint(options, conn.baseURL, user, pass, caBundle)
+	if err != nil {
+		return nil, fmt.Errorf("fingerprint Harbor connection settings: %w", err)
+	}
+	if options.harborClientCache == nil {
+		return newHarborClient(options, conn.baseURL, user, pass, caBundle)
+	}
+	return options.harborClientCache.getOrCreate(
+		harborClientCacheIdentity(conn),
+		fingerprint,
+		func() (*harborclient.Client, error) {
+			return newHarborClient(options, conn.baseURL, user, pass, caBundle)
+		},
+	)
 }
 
 func resolveConnectionCABundle(ctx context.Context, options OperatorOptions, c client.Client, conn *connectionConfig) (string, error) {
@@ -484,18 +494,9 @@ func resolveConnectionCABundle(ctx context.Context, options OperatorOptions, c c
 }
 
 func newHarborClient(options OperatorOptions, baseURL, user, pass, caBundle string) (*harborclient.Client, error) {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	if caBundle != "" {
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM([]byte(caBundle)) {
-			return nil, fmt.Errorf("invalid caBundle: no certificates found")
-		}
-		transport.TLSClientConfig = &tls.Config{RootCAs: pool}
-	}
-
-	httpClient := &http.Client{
-		Timeout:   options.requestTimeout(),
-		Transport: transport,
+	httpClient, err := createHarborHTTPClient(options, caBundle)
+	if err != nil {
+		return nil, err
 	}
 	return harborclient.NewWithHTTPClient(baseURL, user, pass, httpClient), nil
 }

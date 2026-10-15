@@ -313,12 +313,49 @@ var _ = Describe("CRD validation and defaulting", func() {
 		})
 	})
 
+	It("rejects reserved metadata on generated Robot Secrets", func() {
+		validRobot := func(name string) *harborv1alpha1.Robot {
+			return &harborv1alpha1.Robot{
+				ObjectMeta: metav1.ObjectMeta{Namespace: testNamespace, Name: name},
+				Spec: harborv1alpha1.RobotSpec{
+					Level: "system",
+					Permissions: []harborv1alpha1.RobotPermission{{
+						Kind:   "system",
+						Access: []harborv1alpha1.RobotAccess{{Resource: harborv1alpha1.RobotResourceAll, Action: harborv1alpha1.RobotActionAll}},
+					}},
+					SecretRef: &harborv1alpha1.SecretOutputReference{Name: "robot-secret", Key: "token"},
+				},
+			}
+		}
+		reservedLabel := validRobot("reserved-secret-label")
+		reservedLabel.Spec.SecretRef.Labels = map[string]string{"harbor.harbor-entity-operator.io/managed-by": "spoofed"}
+		expectInvalid(reservedLabel)
+
+		reservedAnnotation := validRobot("reserved-secret-annotation")
+		reservedAnnotation.Spec.SecretRef.Annotations = map[string]string{"harbor.harbor-entity-operator.io/owner-name": "spoofed"}
+		expectInvalid(reservedAnnotation)
+	})
+
+	It("rejects a data key on fixed-shape image-pull Secret output", func() {
+		expectInvalid(&harborv1alpha1.Robot{
+			ObjectMeta: metav1.ObjectMeta{Namespace: testNamespace, Name: "image-pull-secret-key"},
+			Spec: harborv1alpha1.RobotSpec{
+				Level:              "system",
+				ImagePullSecretRef: &harborv1alpha1.SecretOutputReference{Name: "robot-pull", Key: "token"},
+				Permissions: []harborv1alpha1.RobotPermission{{
+					Kind:   "system",
+					Access: []harborv1alpha1.RobotAccess{{Resource: harborv1alpha1.RobotResourceAll, Action: harborv1alpha1.RobotActionAll}},
+				}},
+			},
+		})
+	})
+
 	It("rejects project references on system-scoped robot permissions", func() {
 		expectInvalid(&harborv1alpha1.Robot{
 			ObjectMeta: metav1.ObjectMeta{Namespace: testNamespace, Name: "invalid-system-project-permission"},
 			Spec: harborv1alpha1.RobotSpec{
 				Level:              "system",
-				ImagePullSecretRef: &harborv1alpha1.SecretObjectReference{Name: "robot-output"},
+				ImagePullSecretRef: &harborv1alpha1.SecretOutputReference{Name: "robot-output"},
 				Permissions: []harborv1alpha1.RobotPermission{{
 					Kind:       "system",
 					ProjectRef: &harborv1alpha1.ProjectReference{Name: "project"},

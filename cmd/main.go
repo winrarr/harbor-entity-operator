@@ -19,6 +19,7 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,6 +73,7 @@ func main() {
 	var allowCrossNamespaceReferences bool
 	var defaultDriftDetectionInterval time.Duration
 	var harborRequestTimeout time.Duration
+	var harborMaxConcurrentRequests int
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -105,11 +107,23 @@ func main() {
 			"Leave at 0 to disable it by default.")
 	flag.DurationVar(&harborRequestTimeout, "harbor-request-timeout", 30*time.Second,
 		"Timeout for each request to the Harbor API. Must be greater than 0.")
+	flag.IntVar(
+		&harborMaxConcurrentRequests,
+		"harbor-max-concurrent-requests",
+		controller.DefaultHarborMaxConcurrentRequests(),
+		"Maximum number of in-flight Harbor API requests across all controllers. Must be greater than 0.")
 	opts := zap.Options{
 		Development: true,
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
+	if harborMaxConcurrentRequests <= 0 {
+		setupLog.Error(
+			fmt.Errorf("harbor max concurrent requests must be greater than zero"),
+			"invalid operator configuration",
+		)
+		os.Exit(1)
+	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	operatorOptions, err := controller.NewOperatorOptions(controller.OperatorConfig{
@@ -118,6 +132,7 @@ func main() {
 		AllowCrossNamespaceReferences: &allowCrossNamespaceReferences,
 		DefaultDriftDetectionInterval: defaultDriftDetectionInterval,
 		HarborRequestTimeout:          harborRequestTimeout,
+		HarborMaxConcurrentRequests:   harborMaxConcurrentRequests,
 	})
 	if err != nil {
 		setupLog.Error(err, "invalid operator configuration")

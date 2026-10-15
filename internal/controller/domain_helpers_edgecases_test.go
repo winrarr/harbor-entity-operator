@@ -92,7 +92,7 @@ func TestRobotValidationReferencesAndPermissionNormalization(t *testing.T) {
 		Spec: harborv1alpha1.RobotSpec{
 			Level:     "project",
 			Duration:  -1,
-			SecretRef: &harborv1alpha1.SecretReference{Name: "token"},
+			SecretRef: &harborv1alpha1.SecretOutputReference{Name: "token"},
 			Permissions: []harborv1alpha1.RobotPermission{{
 				Kind: "project", Access: []harborv1alpha1.RobotAccess{{Resource: "repository", Action: "push"}},
 			}},
@@ -133,8 +133,8 @@ func TestRobotValidationReferencesAndPermissionNormalization(t *testing.T) {
 		cr   *harborv1alpha1.Robot
 		want string
 	}{
-		{name: "empty robot Secret name", cr: &harborv1alpha1.Robot{ObjectMeta: valid.ObjectMeta, Spec: harborv1alpha1.RobotSpec{SecretRef: &harborv1alpha1.SecretReference{}}}, want: "spec.secretRef.name is required"},
-		{name: "reserved robot username key", cr: &harborv1alpha1.Robot{ObjectMeta: valid.ObjectMeta, Spec: harborv1alpha1.RobotSpec{SecretRef: &harborv1alpha1.SecretReference{Name: "token", Key: robotUsernameSecretKey}}}, want: "reserved"},
+		{name: "empty robot Secret name", cr: &harborv1alpha1.Robot{ObjectMeta: valid.ObjectMeta, Spec: harborv1alpha1.RobotSpec{SecretRef: &harborv1alpha1.SecretOutputReference{}}}, want: "spec.secretRef.name is required"},
+		{name: "reserved robot username key", cr: &harborv1alpha1.Robot{ObjectMeta: valid.ObjectMeta, Spec: harborv1alpha1.RobotSpec{SecretRef: &harborv1alpha1.SecretOutputReference{Name: "token", Key: robotUsernameSecretKey}}}, want: "reserved"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			if _, err := resolveRobotSecretRef(test.cr); err == nil || !strings.Contains(err.Error(), test.want) {
@@ -144,7 +144,7 @@ func TestRobotValidationReferencesAndPermissionNormalization(t *testing.T) {
 	}
 
 	imagePull := valid.DeepCopy()
-	imagePull.Spec.ImagePullSecretRef = &harborv1alpha1.SecretObjectReference{Name: "docker"}
+	imagePull.Spec.ImagePullSecretRef = &harborv1alpha1.SecretOutputReference{Name: "docker"}
 	imageRef, err = resolveImagePullSecretRef(imagePull, secretRef)
 	if err != nil || imageRef == nil || imageRef.Namespace != "team-a" {
 		t.Fatalf("default image pull Secret reference = %#v, %v", imageRef, err)
@@ -153,7 +153,7 @@ func TestRobotValidationReferencesAndPermissionNormalization(t *testing.T) {
 	if _, err := resolveImagePullSecretRef(imagePull, secretRef); err == nil || !strings.Contains(err.Error(), "different Secret") {
 		t.Fatalf("shared token/image-pull Secret reference error = %v", err)
 	}
-	imagePull.Spec.ImagePullSecretRef = &harborv1alpha1.SecretObjectReference{}
+	imagePull.Spec.ImagePullSecretRef = &harborv1alpha1.SecretOutputReference{}
 	if _, err := resolveImagePullSecretRef(imagePull, secretRef); err == nil || !strings.Contains(err.Error(), "name is required") {
 		t.Fatalf("empty image pull Secret reference error = %v", err)
 	}
