@@ -104,35 +104,6 @@ nav = [
   ] },
 ]
 
-[project.theme]
-variant = "classic"
-features = [
-  "navigation.instant",
-  "navigation.tabs",
-  "navigation.sections",
-  "navigation.tracking",
-  "navigation.top",
-  "navigation.indexes",
-  "search.highlight",
-  "search.suggest",
-  "content.code.copy",
-  "content.action.edit",
-  "content.action.view",
-  "content.footer",
-]
-
-[[project.theme.palette]]
-media = "(prefers-color-scheme: light)"
-scheme = "default"
-toggle.icon = "material/brightness-7"
-toggle.name = "Switch to dark mode"
-
-[[project.theme.palette]]
-media = "(prefers-color-scheme: dark)"
-scheme = "slate"
-toggle.icon = "material/brightness-4"
-toggle.name = "Switch to light mode"
-
 [project.markdown_extensions]
 admonition = {}
 attr_list = {}
