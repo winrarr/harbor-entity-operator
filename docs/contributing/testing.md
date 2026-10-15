@@ -38,4 +38,4 @@ Serve them locally with:
 make docs-serve
 ```
 
-These commands run through the `squidfunk/mkdocs-material` container image for consistency with CI.
+These commands run through the pinned Zensical container image for consistency with CI.

@@ -128,9 +128,9 @@
   customManagers: [
     {
       customType: "regex",
-      description: "Update GitHub release tool versions declared in the Makefile.",
+      description: "Update GitHub release tool versions declared in local Make configuration.",
       managerFilePatterns: [
-        "/^Makefile$/",
+        "/^hack\\/make-config\\.mk$/",
       ],
       matchStrings: [
         "# renovate: datasource=(?<datasource>[a-zA-Z0-9-._]+) depName=(?<depName>[^\\s]+)\\n[A-Za-z0-9_]+_VERSION\\s*\\?=\\s*[\\\"']?(?<currentValue>[^\\s\\\"']+)[\\\"']?",
@@ -141,45 +141,21 @@
       customType: "regex",
       description: "Update the Harbor version used by the local integration stack.",
       managerFilePatterns: [
-        "/^Makefile$/",
+        "/^hack\\/make-config\\.mk$/",
       ],
       matchStrings: [
-        "# renovate: datasource=docker depName=goharbor/harbor-core\\nHARBOR_VERSION\\s*\\?=\\s*(?<currentValue>[^\\s]+)",
+        "# renovate: datasource=(?<datasource>docker) depName=(?<depName>[^\\s]+)\\nHARBOR_VERSION\\s*\\?=\\s*(?<currentValue>[^\\s]+)",
       ],
-      datasourceTemplate: "docker",
     },
     {
       customType: "regex",
-      description: "Update the Kubernetes node image used by local Kind clusters.",
+      description: "Update Docker image tags and digests declared in local Make configuration.",
       managerFilePatterns: [
-        "/^Makefile$/",
+        "/^hack\\/make-config\\.mk$/",
       ],
       matchStrings: [
-        "# renovate: datasource=docker depName=kindest/node\\nKIND_NODE_IMAGE\\s*\\?=\\s*kindest/node:(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]+)",
+        "# renovate: datasource=(?<datasource>docker) depName=(?<depName>[^\\s]+)\\n(?<prefix>[A-Z_]+\\s*\\?=\\s*[^:\\s]+:)(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]+)",
       ],
-      datasourceTemplate: "docker",
-    },
-    {
-      customType: "regex",
-      description: "Update Docker image tags referenced in the Makefile.",
-      managerFilePatterns: [
-        "/^Makefile$/",
-      ],
-      matchStrings: [
-        "DOCS_CONTAINER_IMAGE\\s*\\?=\\s*(?<depName>[^:\\s]+(?:/[^:\\s]+)+):(?<currentValue>[^\\s]+)",
-      ],
-      datasourceTemplate: "docker",
-    },
-    {
-      customType: "regex",
-      description: "Update Docker image tags used directly in the docs workflow run command.",
-      managerFilePatterns: [
-        "/^\\.github\\/workflows\\/docs\\.yaml$/",
-      ],
-      matchStrings: [
-        "(?<depName>squidfunk\\/mkdocs-material):(?<currentValue>[^\\s\"']+)",
-      ],
-      datasourceTemplate: "docker",
     },
     {
       customType: "regex",
