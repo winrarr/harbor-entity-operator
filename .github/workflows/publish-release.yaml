@@ -29,6 +29,7 @@ permissions:
   checks: read
   contents: write
   packages: write
+  id-token: write
 
 env:
   REGISTRY: ghcr.io
@@ -232,44 +233,83 @@ jobs:
           echo "Operator image ${OPERATOR_IMAGE}:${OPERATOR_VERSION} was not found in GHCR" >&2
           exit 1
 
+      - name: Package chart
+        env:
+          CHART_VERSION: ${{ steps.metadata.outputs.chart_version }}
+          OPERATOR_VERSION: ${{ steps.metadata.outputs.operator_version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          helm package charts/harbor-entity-operator \
+            --version "$CHART_VERSION" \
+            --app-version "$OPERATOR_VERSION" \
+            --destination dist
+
       - name: Check whether chart package already exists
         id: chart_exists
         if: env.DRY_RUN != 'true'
         env:
           CHART_REPOSITORY: ${{ env.CHART_REPOSITORY }}
           CHART_VERSION: ${{ steps.metadata.outputs.chart_version }}
-          OPERATOR_VERSION: ${{ steps.metadata.outputs.operator_version }}
         run: |
           set -euo pipefail
 
-          existing_chart="$(helm show chart "oci://${CHART_REPOSITORY}/harbor-entity-operator" --version "$CHART_VERSION" 2>/dev/null || true)"
-          if [ -n "$existing_chart" ]; then
-            existing_app_version="$(awk '$1 == "appVersion:" { value=$2; gsub(/^"/, "", value); gsub(/"$/, "", value); print value; exit }' <<<"$existing_chart")"
-            if [ "$existing_app_version" != "$OPERATOR_VERSION" ]; then
-              echo "Existing chart $CHART_VERSION has appVersion $existing_app_version, expected $OPERATOR_VERSION" >&2
+          chart_file="dist/harbor-entity-operator-$CHART_VERSION.tgz"
+          chart_oci="oci://$CHART_REPOSITORY/harbor-entity-operator"
+          mkdir -p dist/remote-chart
+          if helm pull "$chart_oci" --version "$CHART_VERSION" --destination dist/remote-chart >dist/helm-pull.out 2>&1; then
+            python3 hack/compare_chart_archives.py "$chart_file" "dist/remote-chart/harbor-entity-operator-$CHART_VERSION.tgz"
+            chart_digest="$(sed -nE 's/^Digest: (sha256:[0-9a-f]{64})$/\1/p' dist/helm-pull.out | tail -n1)"
+            if [[ -z "$chart_digest" ]]; then
+              cat dist/helm-pull.out >&2
+              echo "Helm did not report the existing chart OCI digest" >&2
               exit 1
             fi
             echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "chart_digest=$chart_digest" >> "$GITHUB_OUTPUT"
           else
+            if ! grep -Eiq '404|not found|manifest unknown' dist/helm-pull.out; then
+              cat dist/helm-pull.out >&2
+              exit 1
+            fi
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Package chart
-        env:
-          CHART_VERSION: ${{ steps.metadata.outputs.chart_version }}
-          OPERATOR_VERSION: ${{ steps.metadata.outputs.operator_version }}
-        run: |
-          helm package charts/harbor-entity-operator \
-            --version "$CHART_VERSION" \
-            --app-version "$OPERATOR_VERSION" \
-            --destination dist
-
       - name: Push chart
+        id: push_chart
         if: env.DRY_RUN != 'true' && steps.chart_exists.outputs.exists != 'true'
         env:
           CHART_REPOSITORY: ${{ env.CHART_REPOSITORY }}
           CHART_VERSION: ${{ steps.metadata.outputs.chart_version }}
-        run: helm push "dist/harbor-entity-operator-${CHART_VERSION}.tgz" "oci://${CHART_REPOSITORY}"
+          CHART_FILE: dist/harbor-entity-operator-${{ steps.metadata.outputs.chart_version }}.tgz
+        run: |
+          set -euo pipefail
+
+          if ! push_output="$(helm push "$CHART_FILE" "oci://$CHART_REPOSITORY" 2>&1)"; then
+            printf '%s\n' "$push_output" >&2
+            exit 1
+          fi
+          printf '%s\n' "$push_output"
+          chart_digest="$(sed -nE 's/^Digest: (sha256:[0-9a-f]{64})$/\1/p' <<<"$push_output" | tail -n1)"
+          if [[ -z "$chart_digest" ]]; then
+            echo "Helm did not report the pushed chart OCI digest" >&2
+            exit 1
+          fi
+          echo "chart_digest=$chart_digest" >> "$GITHUB_OUTPUT"
+
+      - name: Install Cosign
+        if: env.DRY_RUN != 'true'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          # renovate: datasource=github-releases depName=sigstore/cosign
+          cosign-release: v3.1.3
+
+      - name: Sign published chart
+        if: env.DRY_RUN != 'true'
+        env:
+          CHART_IMAGE: ${{ env.CHART_REPOSITORY }}/harbor-entity-operator
+          CHART_DIGEST: ${{ steps.chart_exists.outputs.chart_digest || steps.push_chart.outputs.chart_digest }}
+        run: cosign sign --yes "${CHART_IMAGE}@${CHART_DIGEST}"
 
       - name: Resolve release notes start tag
         id: notes

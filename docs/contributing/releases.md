@@ -92,7 +92,8 @@ The `Publish Release` workflow then:
 1. validates that `appVersion` is `0.7.1`;
 2. builds and pushes `ghcr.io/winrarr/harbor-entity-operator:0.7.1`;
 3. packages and pushes the chart using `Chart.yaml.version`;
-4. creates the GitHub Release and uploads the chart package.
+4. signs the published chart digest with keyless Cosign through GitHub OIDC;
+5. creates the GitHub Release and uploads the chart package.
 
 Stable operator releases use stable chart versions. Release candidates use
 matching release-candidate metadata.
@@ -105,14 +106,23 @@ operator image version. After required checks pass, run the **Publish
 Chart-only Release** workflow and select the source branch and a new stable
 chart version. The workflow checks the source commit, required checks, support
 window, stable image, and immutable `chart-vX.Y.Z` tag before publishing. It
-attests the published OCI chart digest and attaches the chart archive to a
-matching GitHub Release.
+signs and attests the published OCI chart digest and attaches the chart archive
+to a matching GitHub Release.
 
 Use the same source branch and chart version to recover a failed run. The
 workflow verifies any existing OCI package, tag, or release asset before
 resuming; it never moves a tag or replaces different chart content. A dry run
 performs source, version, check, image, and packaging validation without
 publishing or creating a tag.
+
+Verify a published chart signature against the release workflow identity:
+
+```sh
+cosign verify \
+  --certificate-identity-regexp 'https://github.com/winrarr/harbor-entity-operator/.github/workflows/(publish-release|publish-chart-only)\.yaml@.*' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  ghcr.io/winrarr/charts/harbor-entity-operator:0.7.1
+```
 
 ## Dependency-only patch train
 
