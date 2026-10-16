@@ -104,6 +104,14 @@ nav = [
   ] },
 ]
 
+[project.theme]
+features = [
+  "navigation.tabs",
+  "content.action.edit",
+  "content.action.view",
+  "content.code.copy",
+]
+
 # Follow the visitor's system preference, with a toggle to switch palettes.
 [[project.theme.palette]]
 media = "(prefers-color-scheme: light)"
