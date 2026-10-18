@@ -2,41 +2,41 @@
 
 ## Project scanner assignment
 
-Allow a Harbor `Project` to declare its selected scanner through a reference to a managed `ScannerRegistration`.
+Enable users to manage which vulnerability scanner Harbor uses for a project through Kubernetes.
 
-Harbor exposes project scanner selection through `GET` and `PUT /projects/{project_name_or_id}/scanner`. The operator already manages projects and scanner registrations, but does not reconcile the relationship between them.
+Harbor supports project-level scanner selection, and the operator already manages projects and scanner registrations. Managing the relationship would let users keep project scanning configuration alongside the rest of their project configuration.
 
 Acceptance criteria:
 
-- A Project can select a ScannerRegistration using a Kubernetes reference, without requiring a Harbor UUID in the spec.
-- Reconciliation waits for and validates the referenced scanner, then applies and detects drift in Harbor's project scanner selection.
-- An omitted reference leaves the current Harbor selection unmanaged; changing a reference changes Harbor's selection. Both behaviors are tested.
-- The Project guide and examples describe scanner selection, and generated CRDs and API reference are current.
+- Users can select a scanner for a Harbor project and observe that selection in Harbor.
+- Changes to the desired selection are reflected in Harbor, and out-of-band changes are handled according to the documented ownership behavior.
+- The behavior for an unspecified scanner and for an unavailable or invalid scanner is explicit, predictable, and documented.
+- The project guide and examples explain scanner selection and its constraints.
 
 ## Harbor user password rotation
 
-Reconcile changes to the password Secret referenced by an existing Harbor `User`.
+Enable users to change the password of an existing Harbor user through Kubernetes.
 
-The User API already requires a password Secret, and Harbor exposes `PUT /users/{user_id}/password`, but the current reconciler uses the Secret only when it creates a user. Operators cannot rotate an existing managed user's password through the declared state.
+The operator already accepts a password Secret when creating a user, but changes to that Secret do not currently update an existing user's password. Harbor supports password changes for local users.
 
 Acceptance criteria:
 
-- Creating a User applies its referenced password; adopting an existing User does not reset its password on first observation.
-- A later change to the referenced Secret rotates the existing user's password.
-- Reconciliation does not repeatedly submit an unchanged password, and retries a failed rotation without recording it as applied.
-- Password contents never appear in resource status, logs, or error messages.
-- The User guide describes password rotation and its Harbor authentication-mode constraints.
-- HTTP and reconciliation tests cover rotation, idempotency, and failure reporting.
+- A deliberate password change updates the credentials accepted by Harbor for an existing local user.
+- Discovering or adopting an existing user does not unexpectedly replace its password.
+- Unchanged desired credentials do not cause repeated password changes; failed changes are reported and can converge after the underlying problem is resolved.
+- Password contents are not exposed through Kubernetes status, logs, or error messages.
+- The user guide explains which Harbor authentication modes support password management and how existing users are handled.
 
 ## Harbor system-admin assignment
 
-Allow an explicitly authorized Kubernetes declaration to promote or demote a Harbor user as a system administrator.
+Enable authorized operators to manage which Harbor users have system-administrator privileges.
 
-Harbor exposes `PUT /users/{user_id}/sysadmin`, and the user response reports `sysadmin_flag`; the current User API does not manage that state. System-admin status is Harbor-global privilege, so ordinary namespace-level control of a namespaced User must not silently grant that privilege.
+Harbor supports changing a user's system-administrator status, but the operator does not currently manage it. This is a Harbor-global privilege, so its management must respect the boundary between cluster-wide authority and namespace-scoped access.
 
 Acceptance criteria:
 
-- A Kubernetes declaration can express both administrator and non-administrator desired state and reconciliation detects remote drift.
-- The API boundary is explicitly authorized at cluster scope, so an ordinary namespaced User writer cannot grant or revoke Harbor-global administrator privilege.
-- Deleting the declaration demotes the referenced user by default; any orphan behavior is explicit and tested.
-- The behavior is covered by Harbor client and observable reconciliation tests, and its RBAC and security constraints are documented.
+- An appropriately authorized operator can grant and revoke system-administrator status, and Harbor reflects the declared state.
+- Namespace-scoped access alone cannot grant or revoke Harbor-global administrator privileges.
+- The effects of removing or deleting the declaration are explicit and predictable, including whether the Harbor privilege is retained or revoked.
+- Unauthorized changes do not alter Harbor privileges and are reported clearly.
+- Documentation explains the authorization boundary and lifecycle behavior.
