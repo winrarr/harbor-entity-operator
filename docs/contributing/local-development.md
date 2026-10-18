@@ -52,7 +52,7 @@ Delete the Kind cluster completely:
 make kind-down
 ```
 
-Use `kind-redeploy` when testing first-install behavior or an intentionally incompatible CRD change. Avoid resetting a shared development cluster that another task may be using.
+Use `kind-redeploy` when testing first-install behavior or a CRD schema change. Avoid resetting a shared development cluster that another task may be using.
 
 ## Focused deployment targets
 

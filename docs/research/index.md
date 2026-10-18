@@ -1,6 +1,6 @@
 # Research
 
-Research notes record upstream evidence that affects the Kubernetes API, Harbor client, reconciliation, and compatibility decisions.
+Research notes record upstream evidence that affects the Kubernetes API, Harbor client, and reconciliation behavior.
 
 - [Harbor API coverage](harbor-api-coverage.md) maps supported CRDs and deliberately excluded API operations to the checked-in official OpenAPI snapshot.
 - [Reference operators](reference-operators.md) records the engineering sources used alongside Harbor's own API contract.

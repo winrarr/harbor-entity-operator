@@ -13,5 +13,4 @@
 ## Future stories
 
 - As a platform operator, I want to manage additional Harbor control-plane features as they gain stable desired-state semantics in Harbor's API.
-- As an operator maintainer, I want compatibility to be checked against supported Harbor versions rather than only the current upstream branch.
 - As an application owner, I want the operator to publish or copy OCI artifacts only if a separate content-delivery workflow can define safe source, provenance, and deletion semantics.

@@ -24,8 +24,8 @@ subset of namespaces, reduce its operational blast radius, or separate
 operator instances by workload. Leaving it empty watches all namespaces.
 
 With `allowCrossNamespaceReferences: false`, a resource may reference only
-objects in its own namespace. The default is `true` for compatibility with
-single-tenant and shared-service installations.
+objects in its own namespace. The default is `true`, so cross-namespace
+references are allowed unless disabled.
 
 ## Creation and drift defaults
 
