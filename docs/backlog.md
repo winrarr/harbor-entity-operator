@@ -10,7 +10,7 @@ Acceptance criteria:
 
 - A Project can select a ScannerRegistration using a Kubernetes reference, without requiring a Harbor UUID in the spec.
 - Reconciliation waits for and validates the referenced scanner, then applies and detects drift in Harbor's project scanner selection.
-- Omitted and changed references have documented, tested behavior.
+- An omitted reference leaves the current Harbor selection unmanaged; changing a reference changes Harbor's selection. Both behaviors are tested.
 - The Project guide and examples describe scanner selection, and generated CRDs and API reference are current.
 
 ## Harbor user password rotation
@@ -21,8 +21,9 @@ The User API already requires a password Secret, and Harbor exposes `PUT /users/
 
 Acceptance criteria:
 
-- Updating the referenced Secret changes the password of an existing Harbor user.
-- Reconciliation does not repeatedly submit an unchanged password, and retries a failed rotation.
+- Creating a User applies its referenced password; adopting an existing User does not reset its password on first observation.
+- A later change to the referenced Secret rotates the existing user's password.
+- Reconciliation does not repeatedly submit an unchanged password, and retries a failed rotation without recording it as applied.
 - Password contents never appear in resource status, logs, or error messages.
 - The User guide describes password rotation and its Harbor authentication-mode constraints.
 - HTTP and reconciliation tests cover rotation, idempotency, and failure reporting.
@@ -35,6 +36,7 @@ Harbor exposes `PUT /users/{user_id}/sysadmin`, and the user response reports `s
 
 Acceptance criteria:
 
-- The API can express both administrator and non-administrator desired state and reconciliation detects remote drift.
-- The resource boundary prevents an ordinary namespaced User writer from granting or revoking Harbor-global administrator privilege.
+- A Kubernetes declaration can express both administrator and non-administrator desired state and reconciliation detects remote drift.
+- The API boundary is explicitly authorized at cluster scope, so an ordinary namespaced User writer cannot grant or revoke Harbor-global administrator privilege.
+- Deleting the declaration demotes the referenced user by default; any orphan behavior is explicit and tested.
 - The behavior is covered by Harbor client and observable reconciliation tests, and its RBAC and security constraints are documented.
