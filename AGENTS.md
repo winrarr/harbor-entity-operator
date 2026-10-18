@@ -19,7 +19,7 @@ Generated outputs include `api/v1alpha1/zz_generated.deepcopy.go`, `config/crd/b
 
 - Start with Harbor's native resource model, scopes, identities, relationships, and API behavior. Add operator-specific abstractions only when they solve a concrete Kubernetes reconciliation or safety problem.
 - Treat multi-tenancy as a first-class design concern. For every resource change, consider Harbor-global identity and lifecycle, namespace and Secret boundaries, cross-namespace references, deletion blast radius, and the operator's privileged access to Harbor.
-- This project has no users yet; do not preserve compatibility for unused API shapes. Prefer forward-only API evolution, including breaking CRD changes, when it improves correctness or clarity.
+- This project has no users yet; prefer forward-only API evolution, including breaking CRD changes, when it improves correctness or clarity.
 - When a task outgrows a simple existing design, a refactor is welcome: do it if it is clearly right and in the just-do-it category; propose it otherwise.
 
 ### Suggesting improvements

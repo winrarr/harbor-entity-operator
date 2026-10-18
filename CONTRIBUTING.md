@@ -10,7 +10,7 @@ Changes should preserve the operator's Kubernetes API, Harbor semantics, generat
 - Do not hand-edit generated DeepCopy code, CRDs, RBAC, chart copies of generated assets, or `docs/reference/api.md`.
 - Start with Harbor's native scopes, identities, relationships, and API behavior before adding an operator-specific abstraction.
 - Treat multi-tenancy as a first-class concern, including global Harbor lifecycle, namespace and Secret boundaries, cross-namespace references, and deletion blast radius.
-- Treat CRD schema, compatibility, ownership, deletion, architecture, and release behavior as wide-impact changes that require deliberate review.
+- Treat CRD schema, ownership, deletion, architecture, and release behavior as wide-impact changes that require deliberate review.
 
 ## Harbor-backed resources
 

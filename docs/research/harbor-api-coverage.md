@@ -10,7 +10,7 @@ The CRD boundary is Harbor control-plane desired state with a stable identity or
 | --- | --- |
 | `HarborConnection`, `ClusterHarborConnection` | Operator connection settings; no Harbor resource endpoint |
 | `Configuration` | `PUT /configurations` |
-| `Project` | `/projects`, project properties, metadata, scanner selection, and project CVE allowlist endpoints |
+| `Project` | `/projects`, project properties, metadata, and project CVE allowlist endpoints |
 | `User` | `/users` and user profile updates |
 | `UserGroupClaim` | `/usergroups`; non-owning claim of a Harbor-global group identity |
 | `HarborUserGroup` | `/usergroups`; owns a Harbor-global group |
@@ -43,6 +43,6 @@ The Harbor connection resources are operator configuration. The other rows are r
 
 The custom role, user-group, system CVE allowlist, and preheat endpoints are represented by the CRDs above. Role, group, and provider identities are cluster-scoped; the system allowlist has one owner per Harbor instance; project preheat policies depend on a managed Project and PreheatInstance. Preheat credentials use Secret references. Individual preheat executions remain imperative operations.
 
-The checked-in OpenAPI snapshot follows Harbor's current `main` branch. Harbor 2.15.4 is the latest stable release, but its release Swagger document does not include `/roles`; the `HarborRole` API is present in the current development build. The normal local Kind stack uses Harbor 2.15.4, and `HARBOR_VERSION=dev` selects Harbor's current development images to exercise role reconciliation. The E2E role test skips only when the live server does not expose `/roles`.
+The checked-in OpenAPI snapshot follows Harbor's current `main` branch and includes the `/roles` API managed by `HarborRole`.
 
-On Harbor 2.15.4, `PUT /usergroups/{group_id}` returns success but ignores `group_type` changes, so `HarborUserGroup.spec.groupType` is immutable. Harbor also rejects disabling a preheat provider while any policy references it; remove or move those policies first.
+Harbor's user-group update endpoint does not apply `group_type` changes, so `HarborUserGroup.spec.groupType` is immutable. Harbor also rejects disabling a preheat provider while any policy references it; remove or move those policies first.

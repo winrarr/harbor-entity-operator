@@ -28,7 +28,5 @@ needed for the role. Built-in Harbor roles cannot be adopted, updated, or
 deleted by this resource. `creationPolicy` follows the shared
 [creation and deletion rules](../reference/deletion-and-ownership.md).
 
-The pinned Harbor development OpenAPI document contains the role endpoints.
-They are absent from the stable Harbor 2.15.4 API, so the Kind E2E role test
-skips when `/api/v2.0/roles` returns 404. Set `HARBOR_VERSION=dev` to test this
-resource against Harbor's development build.
+Harbor must expose the `/api/v2.0/roles` endpoints for this resource to
+reconcile.
